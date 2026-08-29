@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_ORG_TIMEZONE, type DataSourceDto, type PrivacyMode } from '@dash/shared';
+import { DEFAULT_ORG_TIMEZONE, type DataSourceDto, type PrivacyMode, type StreakMode } from '@dash/shared';
 import { z } from 'zod';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -96,6 +96,13 @@ const schema = z.object({
   OTEL_MAX_BODY_MB: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(512).default(8)),
   /** IANA zone the daily tables are keyed by, and the org work-week's zone. */
   ORG_TIMEZONE: z.preprocess(emptyToUndef, z.string().default(DEFAULT_ORG_TIMEZONE)),
+  /**
+   * Which streak rule the org runs. `workweek` (default) measures against the
+   * weekdays each person actually works, so their usual days off don't break a
+   * run; `calendar` counts consecutive days and any gap ends one. Streak badge
+   * thresholds mean different things under each — see scoreTargets.streaks.
+   */
+  STREAK_MODE: z.preprocess(emptyToUndef, z.enum(['workweek', 'calendar']).default('workweek')),
   /** Explicit data-source override; keys are still validated per source. */
   DATA_SOURCE: z.preprocess(emptyToUndef, z.enum(['demo', 'telemetry', 'console', 'enterprise']).optional()),
   /** How much detail the OTel receiver keeps (see otel/privacy.ts). */
@@ -131,6 +138,7 @@ export interface Env {
   otelIngestToken: string | null;
   otelMaxBodyBytes: number;
   orgTimezone: string;
+  streakMode: StreakMode;
 }
 
 export function loadEnv(): Env {
@@ -197,5 +205,6 @@ export function loadEnv(): Env {
     otelIngestToken: p.OTEL_INGEST_TOKEN ?? null,
     otelMaxBodyBytes: p.OTEL_MAX_BODY_MB * 1024 * 1024,
     orgTimezone: p.ORG_TIMEZONE,
+    streakMode: p.STREAK_MODE,
   };
 }

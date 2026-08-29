@@ -7,6 +7,8 @@ import { parseBody } from './shared';
 const targetNum = z.number().positive().finite();
 const shareNum = z.number().positive().max(1).finite();
 const hourNum = z.number().int().min(0).max(23);
+/** streak tiers are whole days in a row */
+const dayNum = z.number().int().positive();
 
 // displayTimezone is deliberately absent: the zone comes from ORG_TIMEZONE, and
 // an editable copy that nothing honoured is worse than no field at all.
@@ -45,6 +47,15 @@ const settingsPatchSchema = z.object({
         })
         .partial()
         .optional(),
+      streaks: z
+        .object({
+          bronze: dayNum,
+          silver: dayNum,
+          gold: dayNum,
+          kryptonite: dayNum,
+        })
+        .partial()
+        .optional(),
     })
     .optional(),
 });
@@ -73,6 +84,7 @@ export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): v
         perWorkday: { ...effective.perWorkday, ...patch.scoreTargets.perWorkday },
         flat: { ...effective.flat, ...patch.scoreTargets.flat },
         timeBadges: { ...effective.timeBadges, ...patch.scoreTargets.timeBadges },
+        streaks: { ...effective.streaks, ...patch.scoreTargets.streaks },
       };
       patch.scoreTargets = resolveTargets(overCurrent);
     }

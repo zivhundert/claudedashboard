@@ -2,10 +2,17 @@
  * Work-week math over 'YYYY-MM-DD' date strings, plus the org-local ⇄ UTC
  * conversions the daily and hourly tables need.
  *
- * There is no single org work week: `expectedWeekdays` learns each person's from
- * their own history, so Sun–Thu, Mon–Fri and a six-day week all measure the same
- * way. Sun–Thu survives only as `DEFAULT_WORKWEEK`, the no-history fallback, and
- * in `workdaysBetween` (a calendar count, ~identical for any five-day week).
+ * Streaks come in two shapes and the org picks one (`STREAK_MODE`):
+ * `calendar` counts consecutive days and any gap ends a run; `workweek` (the
+ * default) measures against the weekdays each person actually works, learned
+ * from their own history, so Sun–Thu, Mon–Fri and a six-day week all measure
+ * the same way. ⚠️ The learner has two things it MUST keep doing: fall back
+ * when nothing clears the rate bar (an empty "expected" set makes every idle day
+ * bridgeable, i.e. a plain count of active days — worse than the no-history
+ * case), and count each weekday's occurrences only from the person's first
+ * active day (a window predating onboarding dilutes everyone below the bar —
+ * that combination silently inflated every streak in a real deployment).
+ * `isWorkday` / `workdaysBetween` are unrelated: they size the score targets.
  * Daily dates are ORG-LOCAL calendar days (see `localDateOf`,
  * used by the telemetry ingest) — the weekday is a property of the date string
  * itself, no timezone conversion involved there. Hour tables stay UTC, so any
@@ -54,7 +61,7 @@ const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 
 /**
  * Org-local calendar day of an instant. The daily bucket MUST be local:
- * everything downstream (work week, streaks, active days) is local, so
+ * everything downstream (streaks, workday counts, active days) is local, so
  * a UTC key files work done after midnight local time under the previous day —
  * silently emptying the new day and breaking streaks.
  */
@@ -125,13 +132,13 @@ export function weekdayOf(date: string): number {
   return toUtcDate(date).getUTCDay();
 }
 
-/** Sun–Thu. Only a fallback now — see {@link expectedWeekdays}. */
-export const DEFAULT_WORKWEEK: ReadonlySet<number> = new Set([0, 1, 2, 3, 4]);
-
 export function isWorkday(date: string): boolean {
   const wd = weekdayOf(date);
   return wd >= 0 && wd <= 4; // Sun–Thu
 }
+
+/** Sun–Thu. The no-history fallback for {@link expectedWeekdays}. */
+export const DEFAULT_WORKWEEK: ReadonlySet<number> = new Set([0, 1, 2, 3, 4]);
 
 /** A weekday counts as "expected" once the person works at least half of them. */
 const EXPECTED_DAY_RATE = 0.5;
@@ -166,7 +173,14 @@ export function expectedWeekdays(
   const occurrences = new Array<number>(7).fill(0);
   const active = new Array<number>(7).fill(0);
   const end = toUtcDate(to).getTime();
-  for (let t = toUtcDate(from).getTime(); t <= end; t += DAY_MS) {
+  // Count occurrences only from the day this person first appears: a window that
+  // predates their onboarding dilutes every weekday below EXPECTED_DAY_RATE, so
+  // a whole org that started recently would have no expected weekdays at all.
+  const firstActive = activeDates.size > 0 ? [...activeDates].sort()[0] : undefined;
+  const start = firstActive
+    ? Math.max(toUtcDate(from).getTime(), toUtcDate(firstActive).getTime())
+    : toUtcDate(from).getTime();
+  for (let t = start; t <= end; t += DAY_MS) {
     const d = new Date(t);
     const wd = d.getUTCDay();
     occurrences[wd] = (occurrences[wd] ?? 0) + 1;
@@ -178,7 +192,11 @@ export function expectedWeekdays(
     const seen = occurrences[wd] ?? 0;
     if (seen > 0 && (active[wd] ?? 0) / seen >= EXPECTED_DAY_RATE) expected.add(wd);
   }
-  return expected;
+  // Nothing cleared the bar — fall back rather than expecting NOTHING. An empty
+  // set makes every idle day bridgeable, which turns the streak into a plain
+  // count of active days; the inverse of the intended guard, and strictly worse
+  // than the no-history case. See the header note.
+  return expected.size === 0 ? fallback : expected;
 }
 
 /** Count Sun–Thu days in [from, to] inclusive. */
@@ -194,6 +212,50 @@ export function workdaysBetween(from: string, to: string): number {
 
 export function daysBetween(from: string, to: string): number {
   return Math.round((toUtcDate(to).getTime() - toUtcDate(from).getTime()) / DAY_MS);
+}
+
+/**
+ * Current streak of consecutive calendar days ending at (or just before) `asOf`.
+ *
+ * Every calendar day counts: a quiet Friday ends a run exactly like a missed
+ * Monday does. An earlier version measured runs against a work week learned
+ * from each person's own history, so weekends were bridged — but the learner
+ * needs half a person's Mondays (etc.) to be active before Monday counts as
+ * theirs, and nobody in a 90-day window that predates their onboarding clears
+ * that bar. With nothing "expected", nothing could break a run and the number
+ * degenerated into a plain count of active days: three missed workdays in a row
+ * still read as a 23-day streak.
+ *
+ * `asOf` itself is granted grace — today is not over, and the day's telemetry
+ * may not have synced yet, so an idle today measures the run through yesterday
+ * instead. Grace is one day and applies only to `asOf`.
+ */
+export function currentDailyStreak(activeDates: ReadonlySet<string>, asOf: string): number {
+  let cursor = activeDates.has(asOf) ? asOf : addDays(asOf, -1);
+  let streak = 0;
+  while (activeDates.has(cursor)) {
+    streak++;
+    cursor = addDays(cursor, -1);
+  }
+  return streak;
+}
+
+/**
+ * Longest run of consecutive calendar days anywhere in the set — the same
+ * contiguity rule {@link currentDailyStreak} walks, so the two can never
+ * disagree about whether a gap breaks a run.
+ */
+export function bestDailyStreak(activeDates: ReadonlySet<string>): number {
+  if (activeDates.size === 0) return 0;
+  let best = 0;
+  let run = 0;
+  let prev: string | null = null;
+  for (const date of [...activeDates].sort()) {
+    run = prev !== null && daysBetween(prev, date) === 1 ? run + 1 : 1;
+    if (run > best) best = run;
+    prev = date;
+  }
+  return best;
 }
 
 /**
@@ -226,7 +288,7 @@ function decidingDayAtOrBefore(
  * streak is measured one counting day earlier, but only once, and only for
  * `asOf` itself.
  */
-export function currentWorkdayStreak(
+export function currentWorkweekStreak(
   activeDates: ReadonlySet<string>,
   asOf: string,
   expected: ReadonlySet<number> = DEFAULT_WORKWEEK,
@@ -246,10 +308,10 @@ export function currentWorkdayStreak(
 
 /**
  * Longest run of active days anywhere in the set, bridging only the person's own
- * idle rest days — the same cap `currentWorkdayStreak` enforces, so the two can
+ * idle rest days — the same cap `currentWorkweekStreak` enforces, so the two can
  * never disagree about whether a gap is contiguous.
  */
-export function bestWorkdayStreak(
+export function bestWorkweekStreak(
   activeDates: ReadonlySet<string>,
   expected: ReadonlySet<number> = DEFAULT_WORKWEEK,
 ): number {
@@ -275,4 +337,34 @@ export function bestWorkdayStreak(
     prev = date;
   }
   return best;
+}
+
+/** Which streak rule the org runs. `workweek` is the default. */
+export type StreakMode = 'calendar' | 'workweek';
+
+export const STREAK_MODES: readonly StreakMode[] = ['workweek', 'calendar'];
+
+export function isStreakMode(v: unknown): v is StreakMode {
+  return v === 'calendar' || v === 'workweek';
+}
+
+/**
+ * Current and best streak under the org's rule — the ONE place either mode is
+ * chosen. Every caller goes through here: three call sites computing modes
+ * independently is how the two drift apart.
+ */
+export function computeStreaks(
+  activeDates: ReadonlySet<string>,
+  asOf: string,
+  mode: StreakMode,
+  from?: string,
+): { current: number; best: number } {
+  if (mode === 'calendar') {
+    return { current: currentDailyStreak(activeDates, asOf), best: bestDailyStreak(activeDates) };
+  }
+  const expected = expectedWeekdays(activeDates, from ?? asOf, asOf);
+  return {
+    current: currentWorkweekStreak(activeDates, asOf, expected),
+    best: bestWorkweekStreak(activeDates, expected),
+  };
 }

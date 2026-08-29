@@ -1,5 +1,5 @@
 /** UTC + org-local time helpers used by scoring, sync and the seeder. */
-import { DEFAULT_ORG_TIMEZONE, localDateOf } from '@dash/shared';
+import { DEFAULT_ORG_TIMEZONE, localDateOf, type StreakMode } from '@dash/shared';
 
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
@@ -18,6 +18,17 @@ export function configureOrgTimezone(tz: string): void {
 
 export function orgTimezone(): string {
   return resolvedOrgTimezone;
+}
+
+/** The org's streak rule, set once at boot from STREAK_MODE. */
+let resolvedStreakMode: StreakMode = 'workweek';
+
+export function configureStreakMode(mode: StreakMode): void {
+  resolvedStreakMode = mode;
+}
+
+export function streakMode(): StreakMode {
+  return resolvedStreakMode;
 }
 
 /**

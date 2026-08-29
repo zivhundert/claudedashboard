@@ -14,7 +14,14 @@ import type { ScoreTargets } from './targets.js';
 
 const CACHE_MASTER_RATIO = 0.7;
 const CACHE_MASTER_MIN_TOKENS = 1_000_000;
-const STREAK_TIERS = { streak_bronze: 5, streak_silver: 10, streak_gold: 20, streak_kryptonite: 40 } as const;
+// Thresholds live in scoreTargets.streaks — what a number costs depends on the
+// org's STREAK_MODE, so the ladder is configuration, not a constant.
+const STREAK_TIER_KEYS = [
+  ['streak_bronze', 'bronze'],
+  ['streak_silver', 'silver'],
+  ['streak_gold', 'gold'],
+  ['streak_kryptonite', 'kryptonite'],
+] as const;
 const POLYGLOT_MODELS = 3;
 const SKILL_SMITH_DISTINCT = 5;
 const SKILL_SMITH_INVOCATIONS = 20;
@@ -131,9 +138,8 @@ export function computeBadges(
 
   // Streaks — earned on the BEST run in the trailing 90d, so a badge you hit
   // survives the day you take off; progress still tracks the current run.
-  for (const [id, need] of Object.entries(STREAK_TIERS) as Array<
-    [keyof typeof STREAK_TIERS, number]
-  >) {
+  for (const [id, key] of STREAK_TIER_KEYS) {
+    const need = targets.streaks[key];
     const best = Math.max(i.bestStreak, i.currentStreak);
     add(
       id,

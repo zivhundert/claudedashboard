@@ -39,7 +39,7 @@ export interface ScoringInput {
    * most 7, which no minimum of 10 could ever clear.
    */
   habitActiveDays: number;
-  /** trailing-90d consecutive active workdays */
+  /** trailing-90d consecutive active calendar days */
   currentStreak: number;
   /** longest such run inside the trailing 90d — what streak badges are earned on */
   bestStreak: number;

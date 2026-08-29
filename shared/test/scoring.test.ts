@@ -16,11 +16,14 @@ import {
 import { computeBadges } from '../src/scoring/badges.js';
 import {
   addDays,
-  bestWorkdayStreak,
+  bestDailyStreak,
+  bestWorkweekStreak,
+  computeStreaks,
+  currentDailyStreak,
+  currentWorkweekStreak,
   expectedWeekdays,
   localDateOf,
   utcHourRangeOfLocalDays,
-  currentWorkdayStreak,
   isWorkday,
   workdaysBetween,
 } from '../src/time/workweek.js';
@@ -127,7 +130,7 @@ describe('percentile', () => {
   });
 });
 
-describe('workweek (Israel, Sun–Thu)', () => {
+describe('workweek + daily streaks', () => {
   it('buckets days in org-local time, not UTC', () => {
     // 2026-07-28 22:30 UTC = 2026-07-29 01:30 in Jerusalem (UTC+3) — late-night
     // work belongs to the NEW day, or the new day looks empty and streaks break.
@@ -177,28 +180,95 @@ describe('workweek (Israel, Sun–Thu)', () => {
     // Sun 2026-07-05 .. Sat 2026-07-11 = Sun,Mon,Tue,Wed,Thu = 5
     expect(workdaysBetween('2026-07-05', '2026-07-11')).toBe(5);
   });
+  it('breaks on ANY missed calendar day, weekend included', () => {
+    // active every workday Sun–Thu, idle Fri+Sat, active again Sun
+    const active = new Set([
+      '2026-07-05', '2026-07-06', '2026-07-07', '2026-07-08', '2026-07-09', '2026-07-12',
+    ]);
+    // the Sun–Thu run was 5 long, but the weekend ended it: today stands alone
+    expect(currentDailyStreak(active, '2026-07-12')).toBe(1);
+    expect(bestDailyStreak(active)).toBe(5);
+  });
+
+  it('counts consecutive calendar days, weekends included when worked', () => {
+    const active = new Set([
+      '2026-07-20', '2026-07-21', '2026-07-22', '2026-07-23', '2026-07-24', '2026-07-25',
+    ]);
+    expect(currentDailyStreak(active, '2026-07-25')).toBe(6);
+    expect(bestDailyStreak(active)).toBe(6);
+  });
+
+  it('grants grace for asOf itself (today not over yet)', () => {
+    const active = new Set(['2026-07-07', '2026-07-08']);
+    expect(currentDailyStreak(active, '2026-07-09')).toBe(2);
+  });
+
+  it('grace is one day only', () => {
+    // both asOf and the day before are idle — the run is over
+    const active = new Set(['2026-07-06', '2026-07-07']);
+    expect(currentDailyStreak(active, '2026-07-09')).toBe(0);
+  });
+
+  it('grace does not bridge an older gap', () => {
+    // asOf active, day before missing → streak 1, not resumed further back
+    const active = new Set(['2026-07-06', '2026-07-09']);
+    expect(currentDailyStreak(active, '2026-07-09')).toBe(1);
+  });
+
+  it('best streak is the longest consecutive run anywhere', () => {
+    const active = new Set(['2026-07-08', '2026-07-09', '2026-07-12', '2026-07-13']);
+    expect(bestDailyStreak(active)).toBe(2);
+  });
+
+  it('current never exceeds best', () => {
+    const active = new Set(['2026-07-20', '2026-07-21', '2026-07-22', '2026-07-25', '2026-07-26']);
+    const current = currentDailyStreak(active, '2026-07-26');
+    const best = bestDailyStreak(active);
+    expect(current).toBe(2);
+    expect(best).toBe(3);
+    expect(current).toBeLessThanOrEqual(best);
+  });
+
+  it('no activity is no streak', () => {
+    expect(currentDailyStreak(new Set(), '2026-07-26')).toBe(0);
+    expect(bestDailyStreak(new Set())).toBe(0);
+  });
+
+  it('a sparse worker accumulates no streak (the inflated-badge regression)', () => {
+    // shape taken from a real inflated case: three workdays missed mid-run,
+    // then a weekend gap — the learned-work-week version scored this run 23
+    const active = new Set([
+      '2026-08-02', '2026-08-06', '2026-08-09', '2026-08-10', '2026-08-11',
+      '2026-08-12', '2026-08-13', '2026-08-16',
+    ]);
+    expect(currentDailyStreak(active, '2026-08-16')).toBe(1);
+    expect(bestDailyStreak(active)).toBe(5); // 08-09 .. 08-13
+  });
+});
+
+describe('workweek streaks (the other mode)', () => {
   it('streak survives the Fri/Sat weekend', () => {
     // active Wed, Thu, then Sun — Fri/Sat skipped
     const active = new Set(['2026-07-08', '2026-07-09', '2026-07-12']);
-    expect(currentWorkdayStreak(active, '2026-07-12')).toBe(3);
+    expect(currentWorkweekStreak(active, '2026-07-12')).toBe(3);
   });
   it('streak breaks on a missed workday', () => {
     // active Wed, Thu, missed Sun, active Mon
     const active = new Set(['2026-07-08', '2026-07-09', '2026-07-13']);
-    expect(currentWorkdayStreak(active, '2026-07-13')).toBe(1);
+    expect(currentWorkweekStreak(active, '2026-07-13')).toBe(1);
   });
   it('grants grace for asOf itself (today not yet active)', () => {
     const active = new Set(['2026-07-07', '2026-07-08']);
-    expect(currentWorkdayStreak(active, '2026-07-09')).toBe(2);
+    expect(currentWorkweekStreak(active, '2026-07-09')).toBe(2);
   });
   it('grace does not bridge an older gap', () => {
     // asOf active, day before missing → streak 1, not resumed further back
     const active = new Set(['2026-07-06', '2026-07-09']);
-    expect(currentWorkdayStreak(active, '2026-07-09')).toBe(1);
+    expect(currentWorkweekStreak(active, '2026-07-09')).toBe(1);
   });
   it('best streak spans weekends too', () => {
     const active = new Set(['2026-07-08', '2026-07-09', '2026-07-12', '2026-07-13']);
-    expect(bestWorkdayStreak(active)).toBe(4);
+    expect(bestWorkweekStreak(active)).toBe(4);
   });
   it('learns each person\'s work week instead of assuming one', () => {
     // Jul 2026: 1st is a Wednesday. A US schedule: every Mon-Fri, never a weekend.
@@ -210,7 +280,7 @@ describe('workweek (Israel, Sun–Thu)', () => {
     expect([...us].sort()).toEqual([1, 2, 3, 4, 5]); // Mon-Fri, no Sunday
     // ...so their idle Sunday does not break the streak, which the Sun-Thu
     // assumption did on every single week
-    expect(currentWorkdayStreak(usDates, '2026-07-24', us)).toBe(15);
+    expect(currentWorkweekStreak(usDates, '2026-07-24', us)).toBe(15);
 
     // An Israeli schedule over the same window: every Sun-Thu.
     const ilDates = new Set<string>();
@@ -219,7 +289,7 @@ describe('workweek (Israel, Sun–Thu)', () => {
     }
     const il = expectedWeekdays(ilDates, '2026-07-05', '2026-07-23');
     expect([...il].sort()).toEqual([0, 1, 2, 3, 4]); // Sun-Thu
-    expect(currentWorkdayStreak(ilDates, '2026-07-23', il)).toBe(15);
+    expect(currentWorkweekStreak(ilDates, '2026-07-23', il)).toBe(15);
 
     // Someone who works most Saturdays: Saturday is one of their work days, so
     // it counts when worked — and an idle one does break the run.
@@ -234,9 +304,9 @@ describe('workweek (Israel, Sun–Thu)', () => {
 
   it('never bridges more than a week away', () => {
     const active = new Set(['2026-07-06', '2026-07-20']);
-    // no expected weekdays at all, but two weeks apart is still two streaks
-    expect(bestWorkdayStreak(active, new Set())).toBe(1);
-    expect(currentWorkdayStreak(active, '2026-07-20', new Set())).toBe(1);
+    // an explicitly empty expected set (no longer reachable via expectedWeekdays)
+    expect(bestWorkweekStreak(active, new Set())).toBe(1);
+    expect(currentWorkweekStreak(active, '2026-07-20', new Set())).toBe(1);
   });
 
   it('current and best enforce the SAME bridge cap', () => {
@@ -247,8 +317,8 @@ describe('workweek (Israel, Sun–Thu)', () => {
     for (const gap of [1, 2, 6, 7, 8, 9, 14]) {
       const end = addDays(start, gap);
       const active = new Set([start, end]);
-      const current = currentWorkdayStreak(active, end, none);
-      const best = bestWorkdayStreak(active, none);
+      const current = currentWorkweekStreak(active, end, none);
+      const best = bestWorkweekStreak(active, none);
       expect(current, `gap of ${gap} days`).toBe(best);
       // a gap of N days holds N-1 idle days; 6 idle bridge, 7 do not
       expect(current, `gap of ${gap} days`).toBe(gap <= 7 ? 2 : 1);
@@ -264,12 +334,48 @@ describe('workweek (Israel, Sun–Thu)', () => {
     const active = new Set([
       '2026-07-20', '2026-07-21', '2026-07-22', '2026-07-23', '2026-07-24', '2026-07-25',
     ]);
-    expect(currentWorkdayStreak(active, '2026-07-25')).toBe(6);
-    expect(bestWorkdayStreak(active)).toBe(6);
+    expect(currentWorkweekStreak(active, '2026-07-25')).toBe(6);
+    expect(bestWorkweekStreak(active)).toBe(6);
     // ...and an idle Sunday after it still breaks the current run
     active.add('2026-07-27');
-    expect(currentWorkdayStreak(active, '2026-07-27')).toBe(1);
-    expect(bestWorkdayStreak(active)).toBe(6);
+    expect(currentWorkweekStreak(active, '2026-07-27')).toBe(1);
+    expect(bestWorkweekStreak(active)).toBe(6);
+  });
+
+  it('learner: an empty result degrades to the fallback, never to "nothing expected"', () => {
+    // One Monday and one Tuesday across four weeks: no weekday clears the 50%
+    // bar even counted from the first active day, so the learned set comes back
+    // empty. Returning it would make every idle day bridgeable — the run below
+    // would read 2 instead of 1.
+    const sparse = new Set(['2026-07-06', '2026-07-14']);
+    const learned = expectedWeekdays(sparse, '2026-05-01', '2026-07-31');
+    expect([...learned].sort()).toEqual([0, 1, 2, 3, 4]); // Sun–Thu fallback
+    expect(currentWorkweekStreak(sparse, '2026-07-14', learned)).toBe(1);
+  });
+
+  it('learner: counts weekdays only from the first active day', () => {
+    // Someone onboarded 2026-07-06 who then works every Mon–Fri. Measured over a
+    // window that starts in May, every weekday sits below the bar and the whole
+    // org reads as having no work week; measured from their first active day,
+    // Mon–Fri is obvious.
+    const dates = new Set<string>();
+    for (const d of ['06', '07', '08', '09', '10', '13', '14', '15', '16', '17', '20', '21', '22', '23', '24']) {
+      dates.add(`2026-07-${d}`);
+    }
+    expect([...expectedWeekdays(dates, '2026-05-01', '2026-07-24')].sort()).toEqual([1, 2, 3, 4, 5]);
+    // ...and the run survives their Sundays, which the diluted version could not
+    expect(currentWorkweekStreak(dates, '2026-07-24', expectedWeekdays(dates, '2026-05-01', '2026-07-24'))).toBe(15);
+  });
+
+  it('computeStreaks dispatches on mode over the same dates', () => {
+    // Sun–Thu twice over, weekends off
+    const dates = new Set([
+      '2026-07-05', '2026-07-06', '2026-07-07', '2026-07-08', '2026-07-09',
+      '2026-07-12', '2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16',
+    ]);
+    expect(computeStreaks(dates, '2026-07-16', 'workweek', '2026-07-05')).toEqual({ current: 10, best: 10 });
+    // the same history under calendar days: each week stands alone
+    expect(computeStreaks(dates, '2026-07-16', 'calendar')).toEqual({ current: 5, best: 5 });
   });
 });
 
@@ -525,17 +631,31 @@ describe('badges', () => {
     expect(map.get('streak_bronze')!.earned).toBe(true);
     expect(map.get('streak_silver')!.earned).toBe(false);
   });
-  it('streak tiers at 5/10/20/40', () => {
+  it('streak tiers default to 5/10/20/40', () => {
     const map = badgesFor(makeInput({ currentStreak: 11 }));
     expect(map.get('streak_bronze')!.earned).toBe(true);
     expect(map.get('streak_silver')!.earned).toBe(true);
     expect(map.get('streak_gold')!.earned).toBe(false);
     expect(map.get('streak_gold')!.progress).toBeCloseTo(0.55);
-    expect(map.get('streak_kryptonite')!.earned).toBe(false);
     expect(map.get('streak_kryptonite')!.progress).toBeCloseTo(0.275);
     const workaholic = badgesFor(makeInput({ currentStreak: 40, bestStreak: 40 }));
     expect(workaholic.get('streak_kryptonite')!.earned).toBe(true);
     expect(badgesFor(makeInput({ currentStreak: 39, bestStreak: 39 })).get('streak_kryptonite')!.earned).toBe(false);
+  });
+  it('streak tiers come from scoreTargets, not a constant', () => {
+    // a calendar-mode org raises the ladder: a five-day week no longer earns
+    const raised = resolveTargets({ streaks: { bronze: 7, silver: 14, gold: 30, kryptonite: 40 } });
+    const week = badgesFor(makeInput({ currentStreak: 5, bestStreak: 5 }), raised);
+    expect(week.get('streak_bronze')!.earned).toBe(false);
+    expect(week.get('streak_bronze')!.progress).toBeCloseTo(5 / 7);
+    expect(week.get('streak_bronze')!.detail).toBe('5 / 7 days');
+    expect(badgesFor(makeInput({ currentStreak: 7, bestStreak: 7 }), raised).get('streak_bronze')!.earned).toBe(true);
+  });
+  it('an out-of-order streak ladder degrades to the defaults', () => {
+    // gold below silver would make the higher badge easier than the lower one
+    expect(resolveTargets({ streaks: { bronze: 7, silver: 14, gold: 3, kryptonite: 40 } }).streaks).toEqual(
+      DEFAULT_SCORE_TARGETS.streaks,
+    );
   });
 
   it('polyglot needs 3 models at >=5% share', () => {

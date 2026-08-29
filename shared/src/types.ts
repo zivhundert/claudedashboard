@@ -175,7 +175,7 @@ export interface BadgeStatus {
 }
 
 export interface StreakInfo {
-  /** consecutive active workdays (Sun–Thu; Fri/Sat never break), trailing 90d */
+  /** active days in a row ending today or yesterday, trailing 90d, on the org's STREAK_MODE */
   current: number;
   best: number;
 }

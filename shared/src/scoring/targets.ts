@@ -48,6 +48,20 @@ export interface ScoreTargets {
     /** distinct active days (trailing 90d) before either badge can be earned */
     minActiveDays: number;
   };
+  /**
+   * Streak badge thresholds, in active days in a row (trailing 90d). What a
+   * given number *costs* depends on the org's `STREAK_MODE`: under `workweek`
+   * a run spans days off the person never works, so 5 is one work week; under
+   * `calendar` every day counts, so 7 is the first tier a five-day week cannot
+   * reach. Defaults suit the work-week rule — an org on calendar days should
+   * raise them via settings.
+   */
+  streaks: {
+    bronze: number;
+    silver: number;
+    gold: number;
+    kryptonite: number;
+  };
 }
 
 export const DEFAULT_SCORE_TARGETS: ScoreTargets = {
@@ -62,6 +76,7 @@ export const DEFAULT_SCORE_TARGETS: ScoreTargets = {
     earlyEndHour: 10,
     minActiveDays: 10,
   },
+  streaks: { bronze: 5, silver: 10, gold: 20, kryptonite: 40 },
 };
 
 /**
@@ -103,7 +118,28 @@ export function resolveTargets(override?: unknown): ScoreTargets {
     perWorkday: pick(DEFAULT_SCORE_TARGETS.perWorkday, o.perWorkday),
     flat: pick(DEFAULT_SCORE_TARGETS.flat, o.flat),
     timeBadges: pickTimeBadges(o.timeBadges),
+    streaks: pickStreaks(o.streaks),
   };
+}
+
+/**
+ * Whole days only, and each tier must be at least its predecessor — an
+ * out-of-order ladder would silently make a higher badge easier than a lower
+ * one. A bad tier degrades to its default rather than breaking the ladder.
+ */
+function pickStreaks(over: unknown): ScoreTargets['streaks'] {
+  const base = DEFAULT_SCORE_TARGETS.streaks;
+  const out = { ...base };
+  if (over && typeof over === 'object') {
+    const o = over as Record<string, unknown>;
+    for (const key of ['bronze', 'silver', 'gold', 'kryptonite'] as const) {
+      const v = o[key];
+      if (typeof v === 'number' && Number.isInteger(v) && v > 0) out[key] = v;
+    }
+  }
+  return out.bronze <= out.silver && out.silver <= out.gold && out.gold <= out.kryptonite
+    ? out
+    : { ...base };
 }
 
 const share = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1;

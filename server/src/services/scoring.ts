@@ -1,18 +1,15 @@
 import {
   addDays,
-  bestWorkdayStreak,
+  computeStreaks,
   computeAxes,
   computeBadges,
   computeBaselines,
-  currentWorkdayStreak,
-  expectedWeekdays,
   segmentFor,
   significantModelCount,
   resolveTargets,
   workdaysBetween,
   utcHourRangeOfLocalDays,
   median,
-  DEFAULT_WORKWEEK,
   TOOL_NAMES,
   type ActorType,
   type Baselines,
@@ -28,7 +25,7 @@ import {
 import type { Repos } from '../repos';
 import { EMPTY_BADGE_STATS } from '../repos/otelRepo';
 import { toUserDto, type UserRow } from '../repos/userRepo';
-import { hourInWindow, localHourOfUtc, orgTimezone } from '../util/time';
+import { hourInWindow, localHourOfUtc, orgTimezone, streakMode } from '../util/time';
 
 export interface RangeParams {
   from: string;
@@ -148,7 +145,6 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
   const activityByUser = sharesFrom(activityRows, (r) => r.events);
   const tokensByUser = sharesFrom(hourlyTokenRows, (r) => r.tokens);
 
-  const expectedByUserId = new Map<number, ReadonlySet<number>>();
   const activeDatesByUser = new Map<number, Set<string>>();
   for (const row of activeDateRows) {
     let set = activeDatesByUser.get(row.user_id);
@@ -185,9 +181,7 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
   for (const userId of usersWithUsage) {
     const daily = dailyByUser.get(userId);
     const userActiveDates = activeDatesByUser.get(userId) ?? new Set<string>();
-    // each person's own work week, over the same trailing window as the streak
-    const userExpected = expectedWeekdays(userActiveDates, streakFrom, to);
-    expectedByUserId.set(userId, userExpected);
+    const userStreaks = computeStreaks(userActiveDates, to, streakMode(), streakFrom);
     const models = modelsByUser.get(userId) ?? [];
     const activity = activityByUser.get(userId);
     const hourly = activity && activity.total > 0 ? activity : tokensByUser.get(userId);
@@ -229,8 +223,8 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
       nightShare: hourly && hourly.total > 0 ? hourly.night / hourly.total : null,
       earlyShare: hourly && hourly.total > 0 ? hourly.early / hourly.total : null,
       habitActiveDays: userActiveDates.size,
-      currentStreak: currentWorkdayStreak(userActiveDates, to, userExpected),
-      bestStreak: bestWorkdayStreak(userActiveDates, userExpected),
+      currentStreak: userStreaks.current,
+      bestStreak: userStreaks.best,
       ...(badgeStatsByUser.get(userId) ?? EMPTY_BADGE_STATS),
     });
   }
@@ -261,7 +255,6 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
       daily: dailyByUser.get(userId),
       models: modelsByUser.get(userId) ?? [],
       activeDates: activeDatesByUser.get(userId) ?? new Set(),
-      expected: expectedByUserId.get(userId) ?? DEFAULT_WORKWEEK,
       sessionsByDay: sessionsByUserDay.get(userId) ?? new Map(),
       lastActiveDate: lastActiveByUserId.get(userId) ?? null,
       to,
@@ -335,15 +328,13 @@ interface EntryParts {
     | undefined;
   models: Array<{ input: number; output: number; cacheRead: number; cacheCreation: number }>;
   activeDates: Set<string>;
-  /** weekdays this person is expected to work, derived from activeDates */
-  expected: ReadonlySet<number>;
   sessionsByDay: Map<string, number>;
   lastActiveDate: string | null;
   to: string;
 }
 
 function assembleEntry(parts: EntryParts): LeaderboardEntry {
-  const { user, input, baselines, targets, coverage, daily, models, activeDates, expected, sessionsByDay, lastActiveDate, to } = parts;
+  const { user, input, baselines, targets, coverage, daily, models, activeDates, sessionsByDay, lastActiveDate, to } = parts;
 
   const axes = computeAxes(input, targets, coverage);
   const segment = segmentFor(axes);
@@ -414,7 +405,7 @@ function assembleEntry(parts: EntryParts): LeaderboardEntry {
     badges,
     streak: {
       current: input.currentStreak,
-      best: bestWorkdayStreak(activeDates, expected),
+      best: computeStreaks(activeDates, to, streakMode(), addDays(to, -89)).best,
     },
     sparkline,
     trendDeltaPct,
@@ -433,7 +424,7 @@ export function entryForUser(data: LeaderboardData, userId: number): Leaderboard
   // with no usage inside [from, to] must still get their trailing data —
   // matching the semantics used for every in-range user.
   const activeDates = data.activeDatesByUserId.get(userId) ?? new Set<string>();
-  const expected = expectedWeekdays(activeDates, addDays(data.range.to, -89), data.range.to);
+  const streaks = computeStreaks(activeDates, data.range.to, streakMode(), addDays(data.range.to, -89));
   const sessionsByDay = data.sessionsByDayByUserId.get(userId) ?? new Map<string, number>();
 
   const zeroInput: ScoringInput = {
@@ -453,8 +444,8 @@ export function entryForUser(data: LeaderboardData, userId: number): Leaderboard
     nightShare: null,
     earlyShare: null,
     habitActiveDays: activeDates.size,
-    currentStreak: currentWorkdayStreak(activeDates, data.range.to, expected),
-    bestStreak: bestWorkdayStreak(activeDates, expected),
+    currentStreak: streaks.current,
+    bestStreak: streaks.best,
     ...EMPTY_BADGE_STATS,
   };
   return assembleEntry({
@@ -466,7 +457,6 @@ export function entryForUser(data: LeaderboardData, userId: number): Leaderboard
     daily: undefined,
     models: [],
     activeDates,
-    expected,
     sessionsByDay,
     lastActiveDate: data.lastActiveByUserId.get(userId) ?? null,
     to: data.range.to,

@@ -50,29 +50,29 @@ export const BADGE_CATALOG: Record<BadgeId, BadgeMeta> = {
     id: 'streak_bronze',
     name: 'Streak · Bronze',
     emoji: '🥉',
-    description: 'A full working week with Claude, every day.',
-    rule: 'Best run of 5 active days in a row in the last 90, measured against your own work week — days you don\'t normally work never break it, and days you do work always count.',
+    description: 'A solid run of days with Claude, back to back.',
+    rule: 'Best run of active days in a row in the last 90 — 5 by default. What that costs depends on your org: under the work-week rule a day you never work doesn\'t break a run, under the calendar rule every day counts. Threshold and rule are org-configurable.',
   },
   streak_silver: {
     id: 'streak_silver',
     name: 'Streak · Silver',
     emoji: '🥈',
-    description: 'Two straight weeks of daily Claude work.',
-    rule: 'Best run of 10 active days in a row in the last 90, on your own work week.',
+    description: 'A long unbroken run with Claude.',
+    rule: 'Best run of active days in a row in the last 90 — 10 by default, on your org\'s streak rule.',
   },
   streak_gold: {
     id: 'streak_gold',
     name: 'Streak · Gold',
     emoji: '🥇',
-    description: 'A whole month of showing up, every single workday.',
-    rule: 'Best run of 20 active days in a row in the last 90, on your own work week.',
+    description: 'Weeks of showing up, without a miss.',
+    rule: 'Best run of active days in a row in the last 90 — 20 by default, on your org\'s streak rule.',
   },
   streak_kryptonite: {
     id: 'streak_kryptonite',
     name: 'Streak · Kryptonite',
     emoji: '💚',
-    description: 'Workaholic — forty days of showing up, every single workday.',
-    rule: 'Best run of 40 active days in a row in the last 90, on your own work week — zero misses.',
+    description: 'Workaholic — forty days of showing up, zero misses.',
+    rule: 'Best run of active days in a row in the last 90 — 40 by default, on your org\'s streak rule.',
   },
   polyglot: {
     id: 'polyglot',
@@ -438,7 +438,7 @@ export const METRIC_GUIDE: Record<
     name: 'Activity calendar',
     formula: 'one cell per day, colored by sessions / net lines / cost',
     explanation:
-      'A year of activity at a glance. Streaks follow your own work week — a day off that you never work doesn\u2019t break one, and a weekend you did work counts.',
+      'A year of activity at a glance. Streaks follow your org\'s rule: consecutive calendar days, or runs measured against the work week you actually keep.',
   },
   badgeCase: {
     name: 'Badge case',
@@ -470,9 +470,9 @@ export const METRIC_GUIDE: Record<
   },
   streak: {
     name: 'Streak',
-    formula: 'active days in a row, your own days off bridged (trailing 90 days)',
+    formula: 'active days in a row (trailing 90 days), on your org\'s streak rule',
     explanation:
-      'Your work week is learned from your own history — whichever weekdays you actually work at least half the time. Sun–Thu, Mon–Fri or six days a week all measure the same way: a day off you never work never breaks the run, a day you do work always counts, and more than a week away breaks it. Today gets grace until it ends — an inactive today doesn’t reset you.',
+      'Two rules exist and your org picks one. Work week (the default) learns the weekdays you actually work from your own history — Sun–Thu, Mon–Fri or six days all measure the same way — so a day off you never work doesn’t break a run, a day you do work always counts, and more than a week away ends it. Calendar counts plain consecutive days: every day counts and any gap ends the run, so a five-day week tops out at 5 and going past that means working a weekend. Either way today gets grace until it ends — an inactive today doesn’t reset you, it measures the run through yesterday.',
   },
   skillsUsage: {
     name: 'Skills usage',
