@@ -112,7 +112,9 @@ export function AppShell() {
   const { email, setIdentifyOpen } = usePersonaStore();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const caps = useCapabilities().data?.capabilities;
+  const capsData = useCapabilities().data;
+  const caps = capsData?.capabilities;
+  const version = capsData?.version;
   const nav = useMemo(() => mainNav(caps), [caps]);
 
   // The server keys its daily tables by ORG_TIMEZONE — every calendar-day
@@ -195,7 +197,7 @@ export function AppShell() {
           type="button"
           onClick={toggleSidebar}
           className={cn(
-            'mb-3 mt-auto flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-muted transition-colors hover:bg-fg/5 hover:text-fg',
+            'mt-auto flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-muted transition-colors hover:bg-fg/5 hover:text-fg',
             collapsed && 'justify-center px-0',
           )}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -203,6 +205,14 @@ export function AppShell() {
           {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
           {!collapsed && <span>Collapse</span>}
         </button>
+
+        {/* Running server version (from /api/capabilities) — what ops sees in the boot banner. */}
+        <div
+          className={cn('pb-3 pt-1 text-[10px] tabular-nums text-muted/70', collapsed ? 'text-center' : 'px-2.5')}
+          title={version ? `Claude Code Insights v${version}` : undefined}
+        >
+          {version ? `v${version}` : '\u00a0'}
+        </div>
       </aside>
 
       {/* Main column */}

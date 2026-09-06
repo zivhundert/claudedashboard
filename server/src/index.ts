@@ -13,6 +13,7 @@ import { SyncLogBus } from './sync/logBus';
 import { SyncManager, type SyncPlan } from './sync/manager';
 import { startScheduler } from './sync/schedule';
 import { TelemetrySyncPlan } from './sync/telemetryPlan';
+import { APP_VERSION } from './version';
 import { configureOrgTimezone } from './util/time';
 
 /** One plan per data source; demo has none (no scheduler, no API calls). */
@@ -81,6 +82,7 @@ async function main(): Promise<void> {
     '',
     '  ┌─────────────────────────────────────────────────┐',
     '  │  Claude Code Org Dashboard — server up           │',
+    `  │  version:   ${`v${APP_VERSION}`.padEnd(37)}│`,
     `  │  port:      ${String(env.port).padEnd(37)}│`,
     `  │  otel port: ${(env.otelPort === null ? `${env.port} (shared with dashboard)` : String(env.otelPort)).padEnd(37)}│`,
     `  │  db:        ${env.dbPath.slice(0, 36).padEnd(37)}│`,

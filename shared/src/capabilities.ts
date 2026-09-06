@@ -40,6 +40,8 @@ export interface CapabilitiesResponse {
   dataSource: DataSourceDto;
   capabilities: Capabilities;
   privacyMode: PrivacyMode;
+  /** Running server's product version (root package.json), e.g. "1.0.0". */
+  version: string;
 }
 
 export function capabilitiesFor(dataSource: DataSourceDto): Capabilities {

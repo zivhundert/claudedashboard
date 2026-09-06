@@ -1,6 +1,7 @@
 import { capabilitiesFor, type CapabilitiesResponse } from '@dash/shared';
 import type { FastifyInstance } from 'fastify';
 import type { AppContext } from '../context';
+import { APP_VERSION } from '../version';
 
 export function registerCapabilityRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.get('/api/capabilities', async (): Promise<CapabilitiesResponse> => {
@@ -12,6 +13,6 @@ export function registerCapabilityRoutes(app: FastifyInstance, ctx: AppContext):
       const ingested = Number(ctx.repos.sync.getState('otel_events_ingested') ?? '0');
       if (Number.isFinite(ingested) && ingested > 0) capabilities.telemetryPacks = true;
     }
-    return { dataSource, capabilities, privacyMode: ctx.env.privacyMode };
+    return { dataSource, capabilities, privacyMode: ctx.env.privacyMode, version: APP_VERSION };
   });
 }
