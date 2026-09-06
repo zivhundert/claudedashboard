@@ -56,9 +56,22 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+            {{- if ne (toString .Values.otelPort) "" }}
+            {{- if eq (toString .Values.otelPort) "8080" }}
+            {{- fail "otelPort must differ from the app port 8080 (leave it empty to share the http port)" }}
+            {{- end }}
+            - name: otel
+              containerPort: {{ .Values.otelPort }}
+              protocol: TCP
+            {{- end }}
           env:
             - name: PORT
               value: "8080"
+            {{- if ne (toString .Values.otelPort) "" }}
+            # Moves POST /otel/* off the http port onto the "otel" port.
+            - name: OTEL_PORT
+              value: {{ .Values.otelPort | quote }}
+            {{- end }}
             - name: DB_PATH
               value: /app/data/dashboard.db
             - name: DATA_SOURCE

@@ -22,7 +22,11 @@ Claude Code Insights is deploying.
    Set this in each dev machine's managed-settings.json (see
    docs/telemetry-setup.md in the repo):
 
-{{- if .Values.ingress.enabled }}
+{{- if ne (toString .Values.otelPort) "" }}
+     "OTEL_EXPORTER_OTLP_ENDPOINT": "http://<{{ if eq .Values.service.type "LoadBalancer" }}LB-EXTERNAL-IP{{ else }}reachable-host{{ end }}>:{{ .Values.otelPort }}/otel"
+     (otelPort is set: the receiver listens ONLY on Service port {{ .Values.otelPort }}.
+     The Ingress, if enabled, does not route it — senders use the Service address.)
+{{- else if .Values.ingress.enabled }}
      "OTEL_EXPORTER_OTLP_ENDPOINT": "http{{ if .Values.ingress.tls }}s{{ end }}://{{ .Values.ingress.host }}/otel"
 {{- else if eq .Values.service.type "LoadBalancer" }}
      "OTEL_EXPORTER_OTLP_ENDPOINT": "http://<LB-EXTERNAL-IP>:{{ .Values.service.port }}/otel"

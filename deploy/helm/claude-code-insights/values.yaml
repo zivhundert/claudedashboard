@@ -3,7 +3,7 @@
 #
 # This file is the operator UI: every knob you are expected to touch is here
 # and documented. The app is a single container (Fastify + SQLite) serving,
-# on ONE port:
+# on ONE port (unless otelPort splits the receiver off — see Exposure):
 #   - the dashboard SPA
 #   - the /api backend (health at GET /api/health)
 #   - the telemetry receiver: POST /otel/v1/logs and POST /otel/v1/metrics
@@ -120,6 +120,17 @@ service:
   type: ClusterIP
   port: 80
   annotations: {}
+
+# Optional dedicated port for the telemetry receiver (env OTEL_PORT).
+# When set, POST /otel/* moves OFF the http port onto this one, the container
+# exposes it as port "otel", and the Service publishes it under the same
+# number. Use it to let dev laptops reach ONLY the receiver (LB rule /
+# NetworkPolicy on this port) while the dashboard stays in-cluster.
+# Must differ from 8080. The Ingress above routes only the http port, so with
+# otelPort set, senders reach the receiver through the Service, e.g.
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://<lb-ip>:<otelPort>/otel
+# Empty = single port (default).
+otelPort: ""
 
 ingress:
   enabled: false

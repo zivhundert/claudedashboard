@@ -98,7 +98,7 @@ Line by line:
 - `OTEL_METRICS_EXPORTER=otlp` — the counters: sessions, lines of code, commits/PRs, tokens, cost, active time. In telemetry mode these fill the core usage tables.
 - `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` — **required**; the server only accepts delta sums (cumulative datapoints would double-count on every export and are dropped, counted in `sync_state.otel_metrics_dropped_cumulative`).
 - `OTEL_METRICS_INCLUDE_VERSION=true` — adds `app.version`, which feeds the **Version drift** card.
-- `OTEL_EXPORTER_OTLP_ENDPOINT` — no trailing `/v1/...`; the exporter appends `/v1/logs` and `/v1/metrics` itself.
+- `OTEL_EXPORTER_OTLP_ENDPOINT` — no trailing `/v1/...`; the exporter appends `/v1/logs` and `/v1/metrics` itself. The port is the server's `PORT` (default 8080), or `OTEL_PORT` if the server runs the receiver on a dedicated listener — in that case `/otel/*` is no longer served on `PORT`.
 - `OTEL_LOG_TOOL_DETAILS=1` — this is what reveals **skill names and subagent types**. It also puts Bash command lines into the payload — `balanced`/`minimal` drop them at ingest, but they do transit the wire, so socialize this with the team before rollout.
 
 If you set `OTEL_INGEST_TOKEN` on the server, add the matching header:
@@ -142,7 +142,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://<dashboard-host>:8080/ot
 
 - **Sessions weren't restarted.** Env vars only apply to Claude Code processes started *after* the config landed. Restart terminals; fully quit + reopen IDEs.
 - **IDE users with only the managed file.** See Option B — the extension ignores managed settings.
-- **Wrong port/host.** The endpoint must be the server's `PORT` (default 8080) and reachable from dev machines: run the `curl` check above from one of them. Remember: no `/v1/logs` suffix in `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- **Wrong port/host.** The endpoint must be the server's `PORT` (default 8080) — or `OTEL_PORT` when that is set, since the receiver then leaves `PORT` — and reachable from dev machines: run the `curl` check above from one of them. Remember: no `/v1/logs` suffix in `OTEL_EXPORTER_OTLP_ENDPOINT`.
 - **Token mismatch.** If the server has `OTEL_INGEST_TOKEN` set, missing/typo'd `OTEL_EXPORTER_OTLP_HEADERS` yields 401s (visible in server logs). The header value format is `Authorization=Bearer <token>`.
 - **Metrics arrive but usage stays empty.** Check the temporality flag — cumulative datapoints are dropped (see `sync_state.otel_metrics_dropped_cumulative`).
 - **Events counted but a page stays empty.** `minimal` mode intentionally buckets names; the Skills page will show `custom_skill`/`mcp_tool` buckets rather than real names.

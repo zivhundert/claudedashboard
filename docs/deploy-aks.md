@@ -117,6 +117,16 @@ trailing `/v1/...` — the exporter appends it. If you set an ingest token
 "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer <token>"
 ```
 
+**Dedicated receiver port (optional).** To expose only the telemetry
+receiver to dev laptops and keep the dashboard in-cluster, set
+`--set otelPort=4318` (any port other than 8080). The pod then runs the
+receiver on its own listener, `/otel/*` disappears from the http port, and
+the Service publishes a second port named `otel` with that number. Point
+senders at `http://<internal-lb-ip>:4318/otel` and restrict the http port
+(80) to the dashboard's audience with your LB rules or a NetworkPolicy. The
+Ingress routes only the http port, so with `otelPort` set, senders must use
+the Service address, not the ingress hostname.
+
 ### 2. Verify ingest
 
 Restart a configured dev machine's Claude Code sessions (env vars are read at

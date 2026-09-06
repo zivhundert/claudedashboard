@@ -2,7 +2,7 @@ import './shims';
 import { capabilitiesFor } from '@dash/shared';
 import { AnthropicClient } from './anthropic/client';
 import { EnterpriseClient } from './anthropic/enterpriseClient';
-import { buildApp } from './app';
+import { buildApp, buildOtelApp } from './app';
 import { openDb } from './db/connection';
 import { migrate } from './db/migrate';
 import { loadEnv, type Env } from './env';
@@ -70,11 +70,19 @@ async function main(): Promise<void> {
 
   await app.listen({ port: env.port, host: '0.0.0.0' });
 
+  // OTEL_PORT: the receiver gets its own listener so it can be firewalled
+  // separately from the dashboard (buildApp skipped the /otel routes).
+  if (env.otelPort !== null) {
+    const otelApp = await buildOtelApp({ env, db, repos, syncManager, syncLog });
+    await otelApp.listen({ port: env.otelPort, host: '0.0.0.0' });
+  }
+
   const lines = [
     '',
     '  ┌─────────────────────────────────────────────────┐',
     '  │  Claude Code Org Dashboard — server up           │',
     `  │  port:      ${String(env.port).padEnd(37)}│`,
+    `  │  otel port: ${(env.otelPort === null ? `${env.port} (shared with dashboard)` : String(env.otelPort)).padEnd(37)}│`,
     `  │  db:        ${env.dbPath.slice(0, 36).padEnd(37)}│`,
     `  │  source:    ${SOURCE_LABEL[env.dataSource].padEnd(37)}│`,
     `  │  privacy:   ${env.privacyMode.padEnd(37)}│`,

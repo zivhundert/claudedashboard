@@ -3,9 +3,10 @@ name: claude-code-insights
 description: >-
   Self-hosted Claude Code usage dashboard — Fastify + SQLite single-container
   app serving the SPA, the /api backend, and the OTLP telemetry receiver
-  (POST /otel/v1/logs|metrics) on one HTTP port.
+  (POST /otel/v1/logs|metrics) on one HTTP port, or with the receiver on a
+  dedicated port via otelPort.
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.1.0"
 home: https://github.com/zivhundert/claude-code-insights
 sources:

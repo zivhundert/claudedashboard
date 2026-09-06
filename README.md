@@ -123,7 +123,7 @@ Every incoming record passes a privacy filter *before* anything is stored — se
 
 Prompt and response **content is never collected** in any mode (Claude Code redacts it client-side by default). The exact policy the server executes is served at `GET /api/telemetry-policy` and rendered in-app as the **"What's collected"** transparency page — what devs see there is what runs, by construction. `OTEL_LOG_TOOL_DETAILS=1` is what reveals skill names and subagent types; it also includes Bash command lines in the payload (which `balanced`/`minimal` drop at ingest) — socialize that with the team before rollout.
 
-Optional auth: set `OTEL_INGEST_TOKEN` in `.env` and add `"OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer <token>"` to the settings snippet. Events carry `user.email`, so they join the same people you see everywhere else. Daily buckets use the org-local calendar day — `ORG_TIMEZONE`, default `Asia/Jerusalem` — matching the Sun–Thu workweek the scores and streaks are built on, so work past midnight lands on the day you'd call it. Hour buckets stay UTC and are converted for display, and hour-bounded queries convert the local-day range rather than assuming the two line up. Rows ingested before this change are still keyed by UTC day. A batch larger than `OTEL_MAX_BODY_MB` (default 8) is rejected and counted in `otel_batch_too_large` — raise it if that counter climbs, but note that every accepted byte is parsed synchronously, so keep `OTEL_INGEST_TOKEN` set if the receiver is reachable beyond a trusted network. Only configured machines send data — the dashboard shows coverage as the rollout ramps.
+Optional auth: set `OTEL_INGEST_TOKEN` in `.env` and add `"OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer <token>"` to the settings snippet. Optional split port: set `OTEL_PORT` (e.g. `4318`) to serve the receiver on its own listener — `/otel/*` then leaves the dashboard port entirely, so you can expose only `OTEL_PORT` to dev machines and keep the UI internal; point `OTEL_EXPORTER_OTLP_ENDPOINT` at `http://<dashboard-host>:<OTEL_PORT>/otel`. Events carry `user.email`, so they join the same people you see everywhere else. Daily buckets use the org-local calendar day — `ORG_TIMEZONE`, default `Asia/Jerusalem` — matching the Sun–Thu workweek the scores and streaks are built on, so work past midnight lands on the day you'd call it. Hour buckets stay UTC and are converted for display, and hour-bounded queries convert the local-day range rather than assuming the two line up. Rows ingested before this change are still keyed by UTC day. A batch larger than `OTEL_MAX_BODY_MB` (default 8) is rejected and counted in `otel_batch_too_large` — raise it if that counter climbs, but note that every accepted byte is parsed synchronously, so keep `OTEL_INGEST_TOKEN` set if the receiver is reachable beyond a trusted network. Only configured machines send data — the dashboard shows coverage as the rollout ramps.
 
 ## What it shows
 
@@ -178,6 +178,8 @@ docker run -d --name claude-code-insights -p 8080:8080 \
 ```
 
 One container: Node serves the built SPA + API on `PORT`; SQLite persists on the volume. A `HEALTHCHECK` hits `/api/health`. Without Docker: `pnpm build && pnpm start`.
+
+To put the OTLP receiver on its own port, set `OTEL_PORT` in `.env` and publish it too, e.g. `-p 8080:8080 -p 4318:4318` with `OTEL_PORT=4318`. The health check stays on `PORT`.
 
 The dashboard itself has **no authentication** — deploy it inside a trusted network or behind an SSO reverse proxy. See [SECURITY.md](SECURITY.md).
 

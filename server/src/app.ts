@@ -25,14 +25,14 @@ import { registerTelemetryPolicyRoutes } from './routes/telemetryPolicy';
 import { registerUserRoutes } from './routes/users';
 import { BadRequestError } from './routes/shared';
 
-export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
-  const app = Fastify({
+function createServer(): FastifyInstance {
+  return Fastify({
     logger: { level: process.env['LOG_LEVEL'] ?? 'info' },
   });
+}
 
-  // Tee sync log lines to stdout too (the live window is the in-memory buffer).
-  ctx.syncLog.setLogger(app.log);
-
+/** Uniform JSON error envelope; shared by the dashboard app and the OTLP listener. */
+function installErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((err: unknown, req, reply) => {
     if (err instanceof BadRequestError) {
       void reply.code(400).send({ error: 'bad_request', message: err.message });
@@ -46,6 +46,19 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       message: typeof maybe.message === 'string' ? maybe.message : 'unexpected error',
     });
   });
+}
+
+/**
+ * The dashboard: API + (in production) the built SPA. The OTLP receiver rides
+ * along on the same listener unless OTEL_PORT moves it to `buildOtelApp`.
+ */
+export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
+  const app = createServer();
+
+  // Tee sync log lines to stdout too (the live window is the in-memory buffer).
+  ctx.syncLog.setLogger(app.log);
+
+  installErrorHandler(app);
 
   await app.register(cors, { origin: true });
 
@@ -65,7 +78,9 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   registerSkillRoutes(app, ctx);
   registerTelemetryPackRoutes(app, ctx);
   registerBreakdownRoutes(app, ctx);
-  await registerOtelRoutes(app, ctx); // OTLP receiver — must precede the SPA fallback
+  if (ctx.env.otelPort === null) {
+    await registerOtelRoutes(app, ctx); // OTLP receiver — must precede the SPA fallback
+  }
   registerSyncRoutes(app, ctx);
   registerSettingsRoutes(app, ctx);
 
@@ -85,5 +100,18 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     return reply.code(404).send({ error: 'not_found' });
   });
 
+  return app;
+}
+
+/**
+ * Standalone OTLP receiver for OTEL_PORT: only POST /otel/v1/{logs,metrics},
+ * no CORS, no SPA. Shares the repos/context with the dashboard app so both
+ * write the same SQLite database.
+ */
+export async function buildOtelApp(ctx: AppContext): Promise<FastifyInstance> {
+  const app = createServer();
+  installErrorHandler(app);
+  await registerOtelRoutes(app, ctx);
+  app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: 'not_found' }));
   return app;
 }

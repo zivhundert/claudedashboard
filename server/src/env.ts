@@ -88,6 +88,13 @@ const schema = z.object({
   /** When set, POST /otel/* requires `Authorization: Bearer <token>`. */
   OTEL_INGEST_TOKEN: z.preprocess(emptyToUndef, z.string().optional()),
   /**
+   * Optional dedicated listener for the OTLP receiver. When set (and different
+   * from PORT) the /otel/* routes move OFF the dashboard port onto this one, so
+   * the receiver can be exposed to dev machines while the UI stays internal.
+   * Unset (default) keeps everything on PORT.
+   */
+  OTEL_PORT: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(65535).optional()),
+  /**
    * Max OTLP batch size. Fastify's 1 MiB default silently 413s busy exporters;
    * every accepted byte is JSON.parsed synchronously, so this is also the DoS
    * surface of an unauthenticated receiver — raise it only as far as the
@@ -130,6 +137,8 @@ export interface Env {
   webDistPath: string;
   otelIngestToken: string | null;
   otelMaxBodyBytes: number;
+  /** Dedicated OTLP receiver port, or null when /otel/* shares `port`. */
+  otelPort: number | null;
   orgTimezone: string;
 }
 
@@ -196,6 +205,8 @@ export function loadEnv(): Env {
     webDistPath: resolveFromRepoRoot(p.WEB_DIST_PATH),
     otelIngestToken: p.OTEL_INGEST_TOKEN ?? null,
     otelMaxBodyBytes: p.OTEL_MAX_BODY_MB * 1024 * 1024,
+    // OTEL_PORT equal to PORT is the single-listener setup spelled out explicitly.
+    otelPort: p.OTEL_PORT !== undefined && p.OTEL_PORT !== p.PORT ? p.OTEL_PORT : null,
     orgTimezone: p.ORG_TIMEZONE,
   };
 }

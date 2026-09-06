@@ -15,5 +15,11 @@ spec:
       port: {{ .Values.service.port }}
       targetPort: http
       protocol: TCP
+    {{- if ne (toString .Values.otelPort) "" }}
+    - name: otel
+      port: {{ .Values.otelPort }}
+      targetPort: otel
+      protocol: TCP
+    {{- end }}
   selector:
     {{- include "claude-code-insights.selectorLabels" . | nindent 4 }}

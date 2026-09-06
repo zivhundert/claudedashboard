@@ -8,7 +8,8 @@
  *   export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
  *   export OTEL_EXPORTER_OTLP_ENDPOINT=http://<host>:<port>/otel
  *
- * The exporter appends /v1/logs and /v1/metrics. Log events are aggregated
+ * <port> is PORT, or OTEL_PORT when the receiver runs on its own listener
+ * (app.ts buildOtelApp). The exporter appends /v1/logs and /v1/metrics. Log events are aggregated
  * into otel_{skill,agent,tool}_daily; metrics land in usage_* (telemetry mode)
  * and the otel_* pack tables (every mode) — see otel/metrics.ts. Every record
  * passes the privacy policy (otel/privacy.ts) before any handler sees it, and
