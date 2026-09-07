@@ -122,6 +122,17 @@ export function maxBy<T>(rows: T[], f: (r: T) => number): number {
 }
 
 /** Today's 'YYYY-MM-DD' in the display zone. */
+/** The window of equal length immediately before [from, to] — for "vs previous period" deltas. */
+export function previousRange(from: string, to: string): { from: string; to: string } {
+  const f = DateTime.fromISO(from, { zone });
+  const t = DateTime.fromISO(to, { zone });
+  const days = Math.max(1, Math.round(t.diff(f, 'days').days) + 1);
+  return {
+    from: f.minus({ days }).toISODate() ?? from,
+    to: f.minus({ days: 1 }).toISODate() ?? from,
+  };
+}
+
 export function todayLocal(): string {
   return nowLocal().toISODate();
 }

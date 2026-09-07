@@ -255,6 +255,15 @@ export interface UserProfileResponse {
    * only daily data exists; fall back to entry.lastActiveDate.
    */
   lastActiveAt: string | null;
+  /** per-day token + cost totals in range (all models summed) — cost & cache trend */
+  tokensDaily: Array<{
+    date: string;
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheCreation: number;
+    costCents: number;
+  }>;
 }
 
 export interface TimeseriesPoint {
@@ -741,6 +750,8 @@ export const BREAKDOWN_DIMENSIONS = [
   'model-reliability',
   'permission-mode',
   'active-users',
+  /** who was active in one UTC hour bucket (entity = 'YYYY-MM-DDTHH:00:00Z') */
+  'active-hour',
 ] as const;
 export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number];
 

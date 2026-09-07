@@ -6,8 +6,8 @@ description: >-
   (POST /otel/v1/logs|metrics) on one HTTP port, or with the receiver on a
   dedicated port via otelPort.
 type: application
-version: 1.0.1
-appVersion: "1.0.1"
+version: 1.0.2
+appVersion: "1.0.2"
 home: https://github.com/zivhundert/claude-code-insights
 sources:
   - https://github.com/zivhundert/claude-code-insights

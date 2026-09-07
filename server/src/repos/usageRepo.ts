@@ -493,6 +493,25 @@ export class UsageRepo {
       .all(userId, from, to) as DailyCostRow[];
   }
 
+  /** Per-day token/cost totals for one user (all models summed) — the profile's cost & cache trend. */
+  tokensDaily(userId: number, from: string, to: string): Array<TokenCostRow & { date: string }> {
+    return this.db
+      .prepare(
+        `SELECT d.date AS date,
+                COALESCE(SUM(m.input_tokens), 0)          AS input_tokens,
+                COALESCE(SUM(m.output_tokens), 0)         AS output_tokens,
+                COALESCE(SUM(m.cache_read_tokens), 0)     AS cache_read_tokens,
+                COALESCE(SUM(m.cache_creation_tokens), 0) AS cache_creation_tokens,
+                COALESCE(SUM(m.cost_cents), 0)            AS cost_cents
+         FROM usage_daily_models m
+         JOIN usage_daily d ON d.id = m.usage_daily_id
+         WHERE d.user_id = @userId AND d.date BETWEEN @from AND @to
+         GROUP BY d.date
+         ORDER BY d.date`,
+      )
+      .all({ userId, from, to }) as Array<TokenCostRow & { date: string }>;
+  }
+
   timeseries(userId: number, from: string, to: string, split: 'none' | 'terminal'): TimeseriesRow[] {
     const keyExpr = split === 'terminal' ? 'd.terminal_type' : 'NULL';
     const groupBy = split === 'terminal' ? 'd.date, d.terminal_type' : 'd.date';

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { Granularity, OverviewDailyPoint } from '@dash/shared';
 import { EChart, type EChartsOption, type EChartsInstance } from '@/components/EChart';
-import { useChartTheme } from '@/lib/chartTheme';
+import { useChartTheme, NAMED_AXIS_GRID_TOP, NAMED_AXIS_NAME_GAP } from '@/lib/chartTheme';
 import { bucketKey } from '@/lib/time';
 import { fmtBucket } from '@/lib/format';
 
@@ -71,7 +71,7 @@ export function ActivityTrend({
         textStyle: { color: t.fg, fontSize: 12 },
       },
       legend: { top: 0, right: 0, textStyle: { color: t.muted, fontSize: 11 }, icon: 'circle', itemWidth: 8 },
-      grid: { left: 8, right: 8, top: 30, bottom: 4, containLabel: true },
+      grid: { left: 8, right: 8, top: NAMED_AXIS_GRID_TOP, bottom: 4, containLabel: true },
       xAxis: {
         type: 'category',
         data: agg.map((a) => fmtBucket(a.bucket, gran)),
@@ -83,6 +83,7 @@ export function ActivityTrend({
         {
           type: 'value',
           name: 'sessions',
+          nameGap: NAMED_AXIS_NAME_GAP,
           nameTextStyle: { color: t.muted, fontSize: 10 },
           axisLabel: { color: t.muted, fontSize: 10.5 },
           splitLine: { lineStyle: { color: t.border, opacity: 0.5 } },
@@ -90,6 +91,7 @@ export function ActivityTrend({
         {
           type: 'value',
           name: 'users',
+          nameGap: NAMED_AXIS_NAME_GAP,
           nameTextStyle: { color: t.muted, fontSize: 10 },
           axisLabel: { color: t.muted, fontSize: 10.5 },
           splitLine: { show: false },

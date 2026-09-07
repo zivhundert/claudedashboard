@@ -11,7 +11,14 @@ interface EChartProps {
   /** exposes the echarts instance (PNG export etc.) */
   instanceRef?: MutableRefObject<EChartsInstance | null>;
   /** click on a data point; receives the raw echarts event params */
-  onClickPoint?: (params: { data?: unknown; name?: string; seriesName?: string; value?: unknown }) => void;
+  onClickPoint?: (params: {
+    data?: unknown;
+    name?: string;
+    seriesName?: string;
+    value?: unknown;
+    /** index into the series data / category axis */
+    dataIndex?: number;
+  }) => void;
 }
 
 /**
@@ -33,7 +40,9 @@ export function EChart({ option, className, instanceRef, onClickPoint }: EChartP
     chartRef.current = chart;
     if (instanceRef) instanceRef.current = chart;
     chart.on('click', (params) => {
-      clickRef.current?.(params as { data?: unknown; name?: string; seriesName?: string; value?: unknown });
+      clickRef.current?.(
+        params as { data?: unknown; name?: string; seriesName?: string; value?: unknown; dataIndex?: number },
+      );
     });
     const ro = new ResizeObserver(() => {
       if (!chart.isDisposed()) chart.resize();

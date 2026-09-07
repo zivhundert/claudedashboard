@@ -126,28 +126,31 @@ const packKey = (name: string, q: RangeQ & { userId?: number | undefined }) => [
 /** Telemetry pack: engaged time / prompts / sessions. `refetchMs` powers the live panel. */
 export function useActivity(
   q: RangeQ & { userId?: number | undefined },
-  opts?: { refetchMs?: number },
+  opts?: { refetchMs?: number; enabled?: boolean },
 ) {
   return useQuery({
     queryKey: packKey('telemetry-activity', q),
     queryFn: () => api.telemetryActivity(q),
+    enabled: opts?.enabled ?? true,
     ...(opts?.refetchMs ? { refetchInterval: opts.refetchMs } : {}),
   });
 }
 
 /** Telemetry pack: API errors / refusals / latency / compactions. */
-export function useReliability(q: RangeQ & { userId?: number | undefined }) {
+export function useReliability(q: RangeQ & { userId?: number | undefined }, enabled = true) {
   return useQuery({
     queryKey: packKey('telemetry-reliability', q),
     queryFn: () => api.telemetryReliability(q),
+    enabled,
   });
 }
 
 /** Telemetry pack: tool-decision sources / permission modes. */
-export function useGovernance(q: RangeQ & { userId?: number | undefined }) {
+export function useGovernance(q: RangeQ & { userId?: number | undefined }, enabled = true) {
   return useQuery({
     queryKey: packKey('telemetry-governance', q),
     queryFn: () => api.telemetryGovernance(q),
+    enabled,
   });
 }
 
@@ -161,10 +164,11 @@ export function useEcosystem(q: RangeQ & { userId?: number | undefined }, enable
 }
 
 /** Telemetry pack: MCP servers / tools / daily trend. */
-export function useMcp(q: RangeQ & { userId?: number | undefined }) {
+export function useMcp(q: RangeQ & { userId?: number | undefined }, enabled = true) {
   return useQuery({
     queryKey: packKey('telemetry-mcp', q),
     queryFn: () => api.telemetryMcp(q),
+    enabled,
   });
 }
 

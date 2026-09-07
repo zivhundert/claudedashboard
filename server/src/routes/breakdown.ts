@@ -23,6 +23,11 @@ export function registerBreakdownRoutes(app: FastifyInstance, ctx: AppContext): 
     const q = parseRangeQuery(req.query);
 
     const { columns, rows } = ctx.repos.breakdown.query(dimension, entity, q.from, q.to, q.teamId);
-    return { dimension, entity, range: { from: q.from, to: q.to }, columns, rows };
+    // An hour bucket is its own range — echo its day so the drawer header is honest.
+    const range =
+      dimension === 'active-hour' && /^\d{4}-\d{2}-\d{2}T/.test(entity)
+        ? { from: entity.slice(0, 10), to: entity.slice(0, 10) }
+        : { from: q.from, to: q.to };
+    return { dimension, entity, range, columns, rows };
   });
 }

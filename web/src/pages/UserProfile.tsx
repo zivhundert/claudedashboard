@@ -12,7 +12,7 @@ import {
   type UserProfileResponse,
 } from '@dash/shared';
 import { useRangeParams } from '@/hooks/useRangeParams';
-import { useHeatmap, useLeaderboard, useSkills, useTimeseries, useUserProfile } from '@/lib/queries';
+import { useCapabilities, useHeatmap, useLeaderboard, useSkills, useTimeseries, useUserProfile } from '@/lib/queries';
 import { useChartTheme, asTipArray } from '@/lib/chartTheme';
 import { bucketRows, sumBy } from '@/lib/time';
 import { fmtBucket, fmtCost, fmtTokens, relativeDate, relativeDateTime } from '@/lib/format';
@@ -26,6 +26,13 @@ import {
   type CalendarMetric,
 } from '@/components/ActivityCalendar';
 import { WhenWorkCard } from '@/components/WhenWorkCard';
+import {
+  PersonalActivitySection,
+  PersonalCostSection,
+  PersonalHealthSection,
+  PersonalToolkitSection,
+} from '@/components/PersonalTelemetry';
+import { SectionHeader } from '@/components/SectionHeader';
 import { AcceptanceByToolChart, perToolTotal } from '@/components/AcceptanceByTool';
 import { Avatar } from '@/components/Avatar';
 import { SegmentChip } from '@/components/SegmentChip';
@@ -48,6 +55,7 @@ export default function UserProfile() {
   const timeseriesQ = useTimeseries(email, { from, to, split });
   const profile = profileQ.data;
   const heatmapQ = useHeatmap({ from, to, userId: profile?.user.id }, profile !== undefined);
+  const caps = useCapabilities().data?.capabilities;
 
   // confetti for newly earned badges
   useEffect(() => {
@@ -114,6 +122,8 @@ export default function UserProfile() {
       <div className="grid grid-cols-12 gap-4">
         <ProfileHeader profile={profile} rank={rank} />
 
+        {/* 1 · Scorecard — where the composite comes from */}
+        <SectionHeader title="Scorecard" />
         <ChartCard
           title="Score radar"
           chartId="score-radar"
@@ -132,19 +142,6 @@ export default function UserProfile() {
             />
           )}
         </ChartCard>
-
-        <ChartCard
-          title="Model mix"
-          chartId="model-donut"
-          metricKey="modelMix"
-          subtitle="Tokens by model; hover for cost"
-          className="col-span-12 md:col-span-6 lg:col-span-4"
-          isEmpty={profile.models.length === 0}
-          emptyText="No model usage in this range"
-        >
-          {(ref) => <ModelDonut instanceRef={ref} models={profile.models} />}
-        </ChartCard>
-
         <ChartCard
           title="Acceptance by tool"
           chartId="profile-acceptance"
@@ -152,19 +149,29 @@ export default function UserProfile() {
           subtitle={
             entry.scores.trustLowConfidence
               ? `Low confidence — fewer than ${GUARDS.minToolEvents} decisions`
-              : undefined
+              : 'Edits kept vs rejected — the Trust axis'
           }
-          className="col-span-12 lg:col-span-4"
+          className="col-span-12 md:col-span-6 lg:col-span-4"
           isEmpty={perToolTotal(entry.metrics.perTool) === 0}
           emptyText="No tool decisions in this range"
         >
           {(ref) => <AcceptanceByToolChart instanceRef={ref} perTool={entry.metrics.perTool} />}
         </ChartCard>
+        <ChartCard
+          title="Model mix"
+          chartId="model-donut"
+          metricKey="modelMix"
+          subtitle="Tokens by model; hover for cost"
+          className="col-span-12 lg:col-span-4"
+          isEmpty={profile.models.length === 0}
+          emptyText="No model usage in this range"
+        >
+          {(ref) => <ModelDonut instanceRef={ref} models={profile.models} />}
+        </ChartCard>
 
-        <SkillsAgentsCard userId={profile.user.id} from={from} to={to} />
-
+        {/* 2 · Rhythm — consistency, volume, when, and right now */}
+        <SectionHeader title="Rhythm" />
         <ActivityCalendarCard calendar={profile.calendar} streak={entry.streak} />
-
         <ChartCard
           title="Personal trend"
           chartId="personal-trend"
@@ -190,7 +197,6 @@ export default function UserProfile() {
         >
           {(ref) => <PersonalTrend instanceRef={ref} ts={timeseriesQ.data} gran={gran} />}
         </ChartCard>
-
         <WhenWorkCard
           title="When I work"
           chartId="profile-heatmap"
@@ -200,7 +206,35 @@ export default function UserProfile() {
           onRetry={() => void heatmapQ.refetch()}
           className="col-span-12 lg:col-span-5"
         />
+        <PersonalActivitySection userId={profile.user.id} from={from} to={to} gran={gran} />
 
+        {/* 3 · Toolkit — how this person works with Claude */}
+        <SectionHeader title="Toolkit" />
+        <SkillsAgentsCard userId={profile.user.id} from={from} to={to} />
+        <PersonalToolkitSection
+          userId={profile.user.id}
+          from={from}
+          to={to}
+          gran={gran}
+          terminalMix={profile.terminalMix}
+          showSurfaces={caps?.terminalMix !== false}
+        />
+
+        {/* 4 · Health & governance — renders its own header (hidden without telemetry packs) */}
+        <PersonalHealthSection userId={profile.user.id} from={from} to={to} gran={gran} />
+
+        {/* 5 · Cost & efficiency */}
+        <SectionHeader title="Cost & efficiency" />
+        <PersonalCostSection
+          userId={profile.user.id}
+          from={from}
+          to={to}
+          gran={gran}
+          tokensDaily={profile.tokensDaily}
+        />
+
+        {/* 6 · Achievements — always last */}
+        <SectionHeader title="Achievements" />
         <BadgeCase entry={entry} />
 
         <HiddenChartChips />

@@ -4,9 +4,10 @@ import { DateTime } from 'luxon';
 import type { Granularity } from '@dash/shared';
 import { nowLocal } from '@/lib/time';
 
-export type RangePreset = '7d' | '30d' | '90d' | 'qtd' | 'custom';
+export type RangePreset = 'today' | '7d' | '30d' | '90d' | 'qtd' | 'custom';
 
 export const RANGE_PRESETS: Array<{ id: RangePreset; label: string }> = [
+  { id: 'today', label: 'Today' },
   { id: '7d', label: '7D' },
   { id: '30d', label: '30D' },
   { id: '90d', label: '90D' },
@@ -20,6 +21,9 @@ function presetRange(preset: RangePreset, fromParam: string | null, toParam: str
   const today = nowLocal().startOf('day');
   const to = today.toISODate();
   switch (preset) {
+    case 'today':
+      // a single org-local day; every endpoint accepts from === to
+      return { from: to, to };
     case '7d':
       return { from: today.minus({ days: 6 }).toISODate(), to };
     case '90d':
@@ -58,7 +62,12 @@ export function useRangeParams(): RangeParams {
 
   const rawRange = searchParams.get('range');
   const preset: RangePreset =
-    rawRange === '7d' || rawRange === '30d' || rawRange === '90d' || rawRange === 'qtd' || rawRange === 'custom'
+    rawRange === 'today' ||
+    rawRange === '7d' ||
+    rawRange === '30d' ||
+    rawRange === '90d' ||
+    rawRange === 'qtd' ||
+    rawRange === 'custom'
       ? rawRange
       : '30d';
   const rawGran = searchParams.get('gran');

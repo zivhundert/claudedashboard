@@ -22,7 +22,7 @@ interface DimensionSpec {
   metrics: MetricSpec[];
 }
 
-const DIMENSIONS: Record<Exclude<BreakdownDimension, 'version'>, DimensionSpec> = {
+const DIMENSIONS: Record<Exclude<BreakdownDimension, 'version' | 'active-hour'>, DimensionSpec> = {
   skill: {
     table: 'otel_skill_daily',
     entityCol: 'skill_name',
@@ -130,6 +130,7 @@ export class BreakdownRepo {
     teamId?: number,
   ): BreakdownResult {
     if (dimension === 'version') return this.versionBreakdown(entity, teamId);
+    if (dimension === 'active-hour') return this.hourBreakdown(entity, teamId);
 
     const spec = DIMENSIONS[dimension];
     const selects = spec.metrics
@@ -181,6 +182,41 @@ export class BreakdownRepo {
       )
       .all(params) as RawRow[];
     return { columns: [], rows: rows.map((r) => this.toUserRow(r, [])) };
+  }
+
+  /**
+   * Who was active in one hour bucket — the "Live today" bar drill-down.
+   * otel_activity_hourly has no date column, so the range is ignored; the
+   * hour itself is returned as last_date so the drawer can say "2h ago".
+   */
+  private hourBreakdown(hourUtc: string, teamId?: number): BreakdownResult {
+    const metrics: MetricSpec[] = [
+      { key: 'prompts', label: 'Prompts', format: 'number', sql: 'SUM(t.prompts)' },
+      { key: 'apiRequests', label: 'API requests', format: 'number', sql: 'SUM(t.api_requests)' },
+      { key: 'sessionsStarted', label: 'Sessions started', format: 'number', sql: 'SUM(t.sessions_started)' },
+    ];
+    const selects = metrics.map((m) => `COALESCE(${m.sql}, 0) AS ${m.key}`).join(', ');
+    let where = `t.hour_utc = @entity AND u.actor_type = 'user'`;
+    const params: Record<string, unknown> = { entity: hourUtc };
+    if (teamId !== undefined) {
+      where += ' AND u.team_id = @teamId';
+      params['teamId'] = teamId;
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT u.id AS user_id, u.name AS name, u.email AS email, u.team_id AS team_id,
+                MAX(t.hour_utc) AS last_date, ${selects}
+         FROM otel_activity_hourly t
+         JOIN users u ON u.id = t.user_id
+         WHERE ${where}
+         GROUP BY u.id
+         ORDER BY prompts DESC, apiRequests DESC, u.name COLLATE NOCASE`,
+      )
+      .all(params) as RawRow[];
+    return {
+      columns: metrics.map(({ key, label, format }) => ({ key, label, format })),
+      rows: rows.map((r) => this.toUserRow(r, metrics)),
+    };
   }
 
   private toUserRow(r: RawRow, metrics: MetricSpec[]): BreakdownUserRow {

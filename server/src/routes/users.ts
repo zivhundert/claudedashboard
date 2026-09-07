@@ -81,6 +81,14 @@ export function registerUserRoutes(app: FastifyInstance, ctx: AppContext): void 
       calendar,
       terminalMix,
       lastActiveAt: ctx.repos.usage.lastActiveAt(user.id),
+      tokensDaily: ctx.repos.usage.tokensDaily(user.id, q.from, q.to).map((r) => ({
+        date: r.date,
+        input: r.input_tokens,
+        output: r.output_tokens,
+        cacheRead: r.cache_read_tokens,
+        cacheCreation: r.cache_creation_tokens,
+        costCents: r.cost_cents,
+      })),
     };
     return response;
   });
