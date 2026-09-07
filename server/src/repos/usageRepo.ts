@@ -446,6 +446,25 @@ export class UsageRepo {
       .all() as Array<{ user_id: number; last_date: string }>;
   }
 
+  /**
+   * Most recent activity instant for one user, best precision available:
+   * telemetry session end times are exact; hourly buckets ('…THH:00:00Z')
+   * give the hour. All three are ISO UTC strings, so MAX() compares correctly.
+   * null when the user only has daily rows.
+   */
+  lastActiveAt(userId: number): string | null {
+    const row = this.db
+      .prepare(
+        `SELECT MAX(ts) AS ts FROM (
+           SELECT MAX(last_event_at) AS ts FROM otel_sessions WHERE user_id = @userId
+           UNION ALL SELECT MAX(hour_utc) FROM otel_activity_hourly WHERE user_id = @userId
+           UNION ALL SELECT MAX(hour_utc) FROM usage_hourly WHERE user_id = @userId
+         )`,
+      )
+      .get({ userId }) as { ts: string | null } | undefined;
+    return row?.ts ?? null;
+  }
+
   // -------------------------------------------------------------------------
   // Profile / timeseries / heatmap
   // -------------------------------------------------------------------------

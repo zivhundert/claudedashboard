@@ -15,7 +15,7 @@ import { useRangeParams } from '@/hooks/useRangeParams';
 import { useHeatmap, useLeaderboard, useSkills, useTimeseries, useUserProfile } from '@/lib/queries';
 import { useChartTheme, asTipArray } from '@/lib/chartTheme';
 import { bucketRows, sumBy } from '@/lib/time';
-import { fmtBucket, fmtCost, fmtTokens, relativeDate } from '@/lib/format';
+import { fmtBucket, fmtCost, fmtTokens, relativeDate, relativeDateTime } from '@/lib/format';
 import { toast } from '@/state/toast';
 import { ChartCard, ChartPage, HiddenChartChips } from '@/components/ChartCard';
 import { EChart, type EChartsOption } from '@/components/EChart';
@@ -260,7 +260,10 @@ function ProfileHeader({
                 <span className="font-normal text-muted">of {rank.of} in the org</span>
               </span>
             )}
-            <span className="text-muted">last active {relativeDate(entry.lastActiveDate)}</span>
+            <span className="text-muted">
+              last active{' '}
+              {profile.lastActiveAt ? relativeDateTime(profile.lastActiveAt) : relativeDate(entry.lastActiveDate)}
+            </span>
           </div>
         </div>
       </div>
@@ -274,7 +277,10 @@ function ProfileHeader({
             {composite === null ? '—' : Math.round(composite)}
           </div>
           <div className="mt-1 text-[10px] uppercase tracking-wider text-muted">
-            composite score
+            <span className="inline-flex items-center gap-1">
+              composite score
+              <InfoPopover metricKey="composite" />
+            </span>
             {composite === null && <span className="block">needs ≥ {GUARDS.minActiveDays} active days</span>}
           </div>
         </div>

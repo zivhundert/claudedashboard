@@ -249,6 +249,12 @@ export interface UserProfileResponse {
   /** trailing 12 months regardless of range filter */
   calendar: CalendarDay[];
   terminalMix: TerminalMixEntry[];
+  /**
+   * Most recent activity as an ISO UTC instant — exact when telemetry sessions
+   * exist, otherwise the top of the last hour bucket (API-fed orgs). null when
+   * only daily data exists; fall back to entry.lastActiveDate.
+   */
+  lastActiveAt: string | null;
 }
 
 export interface TimeseriesPoint {

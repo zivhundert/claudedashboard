@@ -68,6 +68,23 @@ export function relativeDate(date: string | null | undefined): string {
   return `${Math.round(days / 365)}y ago`;
 }
 
+/**
+ * ISO instant → "today at 14:37" / "yesterday at 09:05" / "Jul 20 at 14:37"
+ * (year added when it differs), in the display zone. null → '—'.
+ */
+export function relativeDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const dt = DateTime.fromISO(iso, { zone: 'utc' }).setZone(displayZone());
+  if (!dt.isValid) return '—';
+  const time = dt.toFormat('HH:mm');
+  const today = nowLocal().startOf('day');
+  const days = Math.round(today.diff(dt.startOf('day'), 'days').days);
+  if (days <= 0) return `today at ${time}`;
+  if (days === 1) return `yesterday at ${time}`;
+  const day = dt.year === today.year ? dt.toFormat('LLL d') : dt.toFormat('LLL d, yyyy');
+  return `${day} at ${time}`;
+}
+
 export function daysSince(date: string | null | undefined): number | null {
   if (!date) return null;
   const dt = DateTime.fromISO(date, { zone: displayZone() }).startOf('day');

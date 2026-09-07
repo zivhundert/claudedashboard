@@ -80,6 +80,7 @@ export function registerUserRoutes(app: FastifyInstance, ctx: AppContext): void 
       models,
       calendar,
       terminalMix,
+      lastActiveAt: ctx.repos.usage.lastActiveAt(user.id),
     };
     return response;
   });

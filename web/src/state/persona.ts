@@ -1,13 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+/**
+ * Internal keys are historical ('developer' | 'lead' | 'director') and persisted
+ * in localStorage — the user-facing names are Personal / Team / Org.
+ */
 export type Persona = 'developer' | 'lead' | 'director';
 
 interface PersonaState {
   persona: Persona;
-  /** developer identity */
+  /** "Who am I": the person shown when viewing as Personal */
   email: string | null;
-  /** team-lead team */
+  /** "My team": the default team shown when viewing as Team */
   teamId: number | null;
   /** transient: the "who are you?" dialog */
   identifyOpen: false | 'developer' | 'lead';
@@ -37,7 +41,7 @@ export const usePersonaStore = create<PersonaState>()(
 );
 
 export const PERSONA_LABELS: Record<Persona, string> = {
-  developer: 'Developer',
-  lead: 'Team Lead',
-  director: 'Director',
+  developer: 'Personal',
+  lead: 'Team',
+  director: 'Org',
 };
