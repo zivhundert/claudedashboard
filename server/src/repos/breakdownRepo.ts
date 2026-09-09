@@ -105,6 +105,16 @@ const DIMENSIONS: Record<Exclude<BreakdownDimension, 'version' | 'active-hour'>,
   },
 };
 
+/** Most recent activity first; people with no known activity last, then by name. */
+function byMostRecent(rows: BreakdownUserRow[]): BreakdownUserRow[] {
+  return [...rows].sort((a, b) => {
+    if (a.lastDate === b.lastDate) return a.name.localeCompare(b.name);
+    if (a.lastDate === null) return 1;
+    if (b.lastDate === null) return -1;
+    return a.lastDate < b.lastDate ? 1 : -1;
+  });
+}
+
 interface RawRow {
   user_id: number;
   name: string;
@@ -142,7 +152,7 @@ export class BreakdownRepo {
     if (dimension === 'active-hour') return this.hourBreakdown(entity, teamId);
     if (dimension === 'active-users') {
       const result = this.tableBreakdown(dimension, entity, from, to, teamId);
-      return { ...result, rows: this.withLastEvent(result.rows) };
+      return { ...result, rows: byMostRecent(this.withLastEvent(result.rows)) };
     }
     return this.tableBreakdown(dimension, entity, from, to, teamId);
   }
@@ -215,7 +225,7 @@ export class BreakdownRepo {
          ORDER BY u.name COLLATE NOCASE`,
       )
       .all(params) as RawRow[];
-    return this.withLastEvent(rows.map((r) => this.toUserRow(r, [])));
+    return byMostRecent(this.withLastEvent(rows.map((r) => this.toUserRow(r, []))));
   }
 
   /**
