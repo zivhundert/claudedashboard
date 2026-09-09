@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './capabilities.js';
+export * from './countries.js';
 export * from './time/workweek.js';
 export * from './scoring/normalize.js';
 export * from './scoring/targets.js';

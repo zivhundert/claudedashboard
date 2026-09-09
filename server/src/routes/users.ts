@@ -1,4 +1,5 @@
 import {
+  COUNTRY_CODES,
   addDays,
   type CalendarDay,
   type ModelUsage,
@@ -148,6 +149,27 @@ export function registerUserRoutes(app: FastifyInstance, ctx: AppContext): void 
       return reply.code(404).send({ error: 'team_not_found' });
     }
     ctx.repos.users.setTeam(userId, body.teamId);
+    const updated = ctx.repos.users.getById(userId);
+    if (!updated) return reply.code(404).send({ error: 'user_not_found' });
+    return toUserDto(updated);
+  });
+
+  app.put('/api/users/:id/country', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const userId = Number(id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return reply.code(404).send({ error: 'user_not_found' });
+    }
+    const body = parseBody(
+      z.object({ country: z.enum(COUNTRY_CODES as unknown as [string, ...string[]]).nullable() }),
+      req.body,
+    );
+    const user = ctx.repos.users.getById(userId);
+    if (!user) return reply.code(404).send({ error: 'user_not_found' });
+    if (user.actor_type !== 'user') {
+      return reply.code(400).send({ error: 'cannot_locate_api_key_actor' });
+    }
+    ctx.repos.users.setCountry(userId, body.country);
     const updated = ctx.repos.users.getById(userId);
     if (!updated) return reply.code(404).send({ error: 'user_not_found' });
     return toUserDto(updated);

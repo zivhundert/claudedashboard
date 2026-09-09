@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
 import type { LeaderboardEntry } from '@dash/shared';
 import { Avatar } from '@/components/Avatar';
+import { CountryFlag } from '@/components/CountryFlag';
 import { SegmentChip } from '@/components/SegmentChip';
 import { fmtCost, fmtNumber, fmtPct, fmtScore, fmtSigned } from '@/lib/format';
 
@@ -47,7 +48,10 @@ export function UserHoverCard({ entry, children }: { entry: LeaderboardEntry; ch
           <div className="flex items-center gap-2.5">
             <Avatar name={entry.user.name} email={entry.user.email} size={36} />
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">{entry.user.name}</div>
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-sm font-semibold">{entry.user.name}</span>
+                <CountryFlag code={entry.user.country} />
+              </div>
               <div className="truncate text-[11px] text-muted">
                 {entry.user.teamName ?? 'No team'}
               </div>

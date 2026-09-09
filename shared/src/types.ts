@@ -68,6 +68,8 @@ export interface UserDto {
   customerType: string | null;
   /** plan for subscription users (pro/max/team/enterprise); null for api/unknown */
   subscriptionType: string | null;
+  /** member location, ISO 3166-1 alpha-2 (see COUNTRIES); set by admins, null = unknown */
+  country: string | null;
 }
 
 export interface TokenTotals {

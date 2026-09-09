@@ -16,6 +16,7 @@ export interface UserRow {
   last_seen_date: string | null;
   customer_type: string | null;
   subscription_type: string | null;
+  country: string | null;
   team_name?: string | null;
 }
 
@@ -35,6 +36,7 @@ export function toUserDto(row: UserRow): UserDto {
     lastSeenDate: row.last_seen_date,
     customerType: row.customer_type,
     subscriptionType: row.subscription_type,
+    country: row.country,
   };
 }
 
@@ -324,6 +326,13 @@ export class UserRepo {
     this.db
       .prepare(`UPDATE users SET team_id = ?, updated_at = datetime('now') WHERE id = ?`)
       .run(teamId, userId);
+  }
+
+  /** Admin-set location (validated ISO code or null to clear). */
+  setCountry(userId: number, country: string | null): void {
+    this.db
+      .prepare(`UPDATE users SET country = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(country, userId);
   }
 
   rosteredUserCount(teamId?: number): number {

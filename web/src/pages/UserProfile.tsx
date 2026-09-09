@@ -35,6 +35,7 @@ import {
 import { SectionHeader } from '@/components/SectionHeader';
 import { AcceptanceByToolChart, perToolTotal } from '@/components/AcceptanceByTool';
 import { Avatar } from '@/components/Avatar';
+import { CountryFlag } from '@/components/CountryFlag';
 import { SegmentChip } from '@/components/SegmentChip';
 import { ConfidenceDot } from '@/components/ConfidenceDot';
 import { DeltaChip } from '@/components/DeltaChip';
@@ -269,6 +270,7 @@ function ProfileHeader({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">{user.name}</h1>
+            <CountryFlag code={user.country} size="md" />
             <SegmentChip tier={entry.segment} size="md" />
           </div>
           <div className="mt-1 text-xs text-muted">

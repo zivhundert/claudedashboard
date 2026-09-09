@@ -1,7 +1,7 @@
 # Claude Code Insights — working notes
 
 ## Languages
-This is a strict TypeScript monorepo (pnpm workspaces: `shared/`, `server/`, `web/`). Prefer TypeScript for all new code and type-safe patterns; `noUncheckedIndexedAccess` is on everywhere. The API contract and all scoring formulas live in `shared/src` — change them there, never inline.
+The API contract and all scoring formulas live in `shared/src` — change them there, never inline.
 
 ## Local development / running the app
 - Before starting any dev server, check the port first (`lsof -i :<port>`) and kill lingering processes from prior runs. Default ports: server 8080 (override with `PORT` in `.env` if something else holds it), Vite 5173. The Vite dev proxy reads `PORT` from the root `.env`, so the two stay in sync automatically.

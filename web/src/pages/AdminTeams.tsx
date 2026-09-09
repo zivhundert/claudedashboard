@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Pencil, Plus, Trash2, Users } from 'lucide-react';
-import type { TeamDto, UserDto } from '@dash/shared';
+import { COUNTRIES, countryFlag, countryName, type TeamDto, type UserDto } from '@dash/shared';
 import {
   useCreateTeam,
   useDeleteTeam,
+  useSetUserCountry,
   useSetUserTeam,
   useTeams,
   useUpdateTeam,
@@ -34,6 +35,7 @@ export default function AdminTeams() {
   const updateTeam = useUpdateTeam();
   const deleteTeam = useDeleteTeam();
   const setUserTeam = useSetUserTeam();
+  const setUserCountry = useSetUserCountry();
 
   const [editing, setEditing] = useState<TeamDto | 'new' | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<TeamDto | null>(null);
@@ -69,6 +71,23 @@ export default function AdminTeams() {
     );
   };
 
+  const locate = (user: UserDto, country: string | null) => {
+    setUserCountry.mutate(
+      { userId: user.id, country },
+      {
+        onSuccess: () =>
+          toast(
+            country === null
+              ? `${user.name}: location cleared`
+              : `${user.name} → ${countryFlag(country) ?? ''} ${countryName(country) ?? country}`,
+            'success',
+          ),
+        onError: (e) => toast('Could not set location', 'error', e instanceof Error ? e.message : undefined),
+      },
+    );
+  };
+  const rowBusy = setUserTeam.isPending || setUserCountry.isPending;
+
   if (teamsQ.isLoading || usersQ.isLoading) {
     return (
       <div className="space-y-4">
@@ -89,7 +108,8 @@ export default function AdminTeams() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Manage teams</h1>
           <p className="mt-0.5 text-xs text-muted">
-            Create teams, pick a color and a lead, and drag people into place with the dropdowns.
+            Create teams, pick a color and a lead, and place people with the dropdowns — team on the right, location
+            (shown as a flag on the leaderboard) beside it.
           </p>
         </div>
         <Button variant="primary" onClick={() => setEditing('new')}>
@@ -110,7 +130,7 @@ export default function AdminTeams() {
               <div className="py-6 text-center text-xs text-muted">Everyone is assigned 🎉</div>
             )}
             {unassigned.map((u) => (
-              <UserRow key={u.id} user={u} teams={teams} onMove={move} busy={setUserTeam.isPending} />
+              <UserRow key={u.id} user={u} teams={teams} onMove={move} onLocate={locate} busy={rowBusy} />
             ))}
           </div>
         </section>
@@ -146,7 +166,7 @@ export default function AdminTeams() {
                     <div className="py-3 text-center text-[11px] text-muted">No members yet.</div>
                   )}
                   {members.map((u) => (
-                    <UserRow key={u.id} user={u} teams={teams} onMove={move} busy={setUserTeam.isPending} />
+                    <UserRow key={u.id} user={u} teams={teams} onMove={move} onLocate={locate} busy={rowBusy} />
                   ))}
                 </div>
               </section>
@@ -225,11 +245,13 @@ function UserRow({
   user,
   teams,
   onMove,
+  onLocate,
   busy,
 }: {
   user: UserDto;
   teams: TeamDto[];
   onMove: (user: UserDto, teamId: number | null) => void;
+  onLocate: (user: UserDto, country: string | null) => void;
   busy: boolean;
 }) {
   return (
@@ -242,6 +264,21 @@ function UserRow({
           {user.role ? ` · ${user.role}` : ''}
         </span>
       </span>
+      <select
+        value={user.country ?? ''}
+        disabled={busy}
+        onChange={(e) => onLocate(user, e.target.value === '' ? null : e.target.value)}
+        className={cn(inputCls, 'w-32 shrink-0 py-1 text-xs')}
+        aria-label={`Set ${user.name}'s location`}
+        title="Location — shown as a flag next to the name on the leaderboard"
+      >
+        <option value="">🌐 Location…</option>
+        {COUNTRIES.map((c) => (
+          <option key={c.code} value={c.code}>
+            {countryFlag(c.code)} {c.name}
+          </option>
+        ))}
+      </select>
       <select
         value={user.teamId === null ? '' : String(user.teamId)}
         disabled={busy}

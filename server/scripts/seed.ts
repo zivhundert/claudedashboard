@@ -248,10 +248,11 @@ function main(): void {
   const teamIds: number[] = TEAMS.map((t) => Number(insertTeam.run(t.name, t.color).lastInsertRowid));
 
   // --- users ---
+  const SEED_COUNTRIES: Array<string | null> = ['IL', 'IL', 'UA', 'IL', 'ES', 'AM', 'IL', 'US', 'GE', 'PL', 'IL', null];
   const devs = buildDevSpecs();
   const insertUser = db.prepare(
-    `INSERT INTO users (actor_type, email, api_key_name, anthropic_user_id, name, role, added_at, in_roster, team_id)
-     VALUES (@actorType, @email, @apiKeyName, @anthropicUserId, @name, @role, @addedAt, @inRoster, @teamId)`,
+    `INSERT INTO users (actor_type, email, api_key_name, anthropic_user_id, name, role, added_at, in_roster, team_id, country)
+     VALUES (@actorType, @email, @apiKeyName, @anthropicUserId, @name, @role, @addedAt, @inRoster, @teamId, @country)`,
   );
 
   interface SeededDev extends DevSpec {
@@ -277,6 +278,8 @@ function main(): void {
         addedAt,
         inRoster: spec.departed ? 0 : 1,
         teamId: spec.teamIdx === null ? null : (teamIds[spec.teamIdx] ?? null),
+        // mostly Israel, the rest spread over the other sites; a few left unknown
+        country: SEED_COUNTRIES[i % SEED_COUNTRIES.length] ?? null,
       }).lastInsertRowid,
     );
     return { ...spec, id, email };

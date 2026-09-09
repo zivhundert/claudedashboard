@@ -323,6 +323,15 @@ export function useSetUserTeam() {
   });
 }
 
+export function useSetUserCountry() {
+  const invalidate = useInvalidator();
+  return useMutation({
+    mutationFn: ({ userId, country }: { userId: number; country: string | null }) =>
+      api.setUserCountry(userId, country),
+    onSuccess: () => invalidate(TEAM_KEYS),
+  });
+}
+
 export function useRunSync() {
   const qc = useQueryClient();
   return useMutation({

@@ -127,6 +127,9 @@ export const api = {
   setUserTeam: (userId: number, teamId: number | null) =>
     request<unknown>(`/api/users/${userId}/team`, { method: 'PUT', ...json({ teamId }) }),
 
+  setUserCountry: (userId: number, country: string | null) =>
+    request<unknown>(`/api/users/${userId}/country`, { method: 'PUT', ...json({ country }) }),
+
   teamsSummary: (q: RangeQ) =>
     request<TeamsSummaryResponse>(`/api/teams/summary${qs({ from: q.from, to: q.to })}`),
 

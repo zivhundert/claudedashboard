@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowDown, ArrowUp, GitCompareArrows } from 'lucide-react';
 import { GUARDS, SEGMENT_ORDER, type LeaderboardEntry } from '@dash/shared';
 import { Avatar } from '@/components/Avatar';
+import { CountryFlag } from '@/components/CountryFlag';
 import { SegmentChip } from '@/components/SegmentChip';
 import { BadgeIcon } from '@/components/BadgeIcon';
 import { ConfidenceDot } from '@/components/ConfidenceDot';
@@ -243,7 +244,10 @@ export function MemberTable({
                       <Link to={profilePath(e)} className="flex min-w-0 items-center gap-2 hover:underline">
                         <Avatar name={e.user.name} email={e.user.email} size={26} />
                         <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-medium">{e.user.name}</span>
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate text-[13px] font-medium">{e.user.name}</span>
+                            <CountryFlag code={e.user.country} />
+                          </span>
                           <span className="block truncate text-[10.5px] text-muted">
                             {e.user.email ?? e.user.apiKeyName ?? ''}
                           </span>
