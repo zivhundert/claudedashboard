@@ -30,6 +30,7 @@ import { GuideDrawer } from '@/components/GuideDrawer';
 import { RangePicker, GranularityControl } from '@/components/RangePicker';
 import { SyncPill } from '@/components/SyncPill';
 import { PersonaSwitcher } from '@/components/PersonaSwitcher';
+import { ReleaseNotesDialog } from '@/components/ReleaseNotesDialog';
 import { Toaster } from '@/components/Toaster';
 import { Tip } from '@/components/ui';
 import { displayZone, setDisplayZone } from '@/lib/time';
@@ -112,6 +113,7 @@ export function AppShell() {
   const { email, setIdentifyOpen } = usePersonaStore();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const capsData = useCapabilities().data;
   const caps = capsData?.capabilities;
   const version = capsData?.version;
@@ -206,12 +208,23 @@ export function AppShell() {
           {!collapsed && <span>Collapse</span>}
         </button>
 
-        {/* Running server version (from /api/capabilities) — what ops sees in the boot banner. */}
-        <div
-          className={cn('pb-3 pt-1 text-[10px] tabular-nums text-muted/70', collapsed ? 'text-center' : 'px-2.5')}
-          title={version ? `Claude Code Insights v${version}` : undefined}
-        >
-          {version ? `v${version}` : '\u00a0'}
+        {/* Running server version (from /api/capabilities) — click for the release notes. */}
+        <div className={cn('pb-3 pt-1', collapsed ? 'flex justify-center' : 'px-2.5')}>
+          <button
+            type="button"
+            onClick={() => setNotesOpen(true)}
+            disabled={!version}
+            title="What’s new in this version"
+            aria-label="Open release notes"
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded-md border border-border bg-card font-mono text-[11px] tabular-nums text-muted transition-colors hover:border-accent/50 hover:text-fg disabled:opacity-0',
+              collapsed ? 'px-1.5 py-1' : 'px-2 py-1',
+            )}
+          >
+            <Sparkles size={11} className="text-accent" aria-hidden="true" />
+            {version ? `v${version}` : ''}
+            {!collapsed && <span className="font-sans text-[10px] text-muted/80">What’s new</span>}
+          </button>
         </div>
       </aside>
 
@@ -263,6 +276,7 @@ export function AppShell() {
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <GuideDrawer open={guideOpen} onOpenChange={setGuideOpen} />
+      <ReleaseNotesDialog open={notesOpen} onOpenChange={setNotesOpen} currentVersion={version} />
       <Toaster />
     </div>
   );
