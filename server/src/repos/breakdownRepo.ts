@@ -140,6 +140,20 @@ export class BreakdownRepo {
   ): BreakdownResult {
     if (dimension === 'version') return this.versionBreakdown(entity, teamId);
     if (dimension === 'active-hour') return this.hourBreakdown(entity, teamId);
+    if (dimension === 'active-users') {
+      const result = this.tableBreakdown(dimension, entity, from, to, teamId);
+      return { ...result, rows: this.withLastEvent(result.rows) };
+    }
+    return this.tableBreakdown(dimension, entity, from, to, teamId);
+  }
+
+  private tableBreakdown(
+    dimension: Exclude<BreakdownDimension, 'version' | 'active-hour'>,
+    entity: string,
+    from: string,
+    to: string,
+    teamId?: number,
+  ): BreakdownResult {
 
     const spec = DIMENSIONS[dimension];
     const selects = spec.metrics
@@ -201,7 +215,32 @@ export class BreakdownRepo {
          ORDER BY u.name COLLATE NOCASE`,
       )
       .all(params) as RawRow[];
-    return rows.map((r) => this.toUserRow(r, []));
+    return this.withLastEvent(rows.map((r) => this.toUserRow(r, [])));
+  }
+
+  /**
+   * Replace each row's day-granular lastDate with the person's most recent
+   * event instant (telemetry session end, else last hour bucket) — the same
+   * sources the profile's "last active" uses — so the drawer can say
+   * "2 hr. ago" instead of midnight of a date. Falls back to the date.
+   */
+  private withLastEvent(rows: BreakdownUserRow[]): BreakdownUserRow[] {
+    if (rows.length === 0) return rows;
+    const latest = new Map<number, string>();
+    const q = this.db
+      .prepare(
+        `SELECT user_id, MAX(ts) AS ts FROM (
+           SELECT user_id, last_event_at AS ts FROM otel_sessions
+           UNION ALL SELECT user_id, hour_utc FROM otel_activity_hourly
+           UNION ALL SELECT user_id, hour_utc FROM usage_hourly
+         ) GROUP BY user_id`,
+      )
+      .all() as Array<{ user_id: number; ts: string | null }>;
+    for (const r of q) if (r.ts) latest.set(r.user_id, r.ts);
+    return rows.map((r) => {
+      const ts = latest.get(r.userId);
+      return ts && (r.lastDate === null || ts >= r.lastDate) ? { ...r, lastDate: ts } : r;
+    });
   }
 
   /** Current-state dimension: who runs Claude Code version @entity right now. */

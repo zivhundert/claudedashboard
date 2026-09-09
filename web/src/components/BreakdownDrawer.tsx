@@ -9,7 +9,7 @@ import { Link } from 'react-router-dom';
 import { Users, UserX } from 'lucide-react';
 import type { BreakdownDimension, BreakdownUserRow } from '@dash/shared';
 import { useBreakdown } from '@/lib/queries';
-import { fmtCost, fmtNumber, fmtPct, relativeIso } from '@/lib/format';
+import { fmtCost, fmtNumber, fmtPct, relativeDate, relativeDateTime, relativeIso } from '@/lib/format';
 import { Avatar } from '@/components/Avatar';
 import { TableSkeleton } from '@/components/Skeleton';
 import { ErrorCard } from '@/components/ErrorCard';
@@ -29,6 +29,24 @@ interface BreakdownDrawerProps {
   target: BreakdownTarget | null;
   onClose: () => void;
   range: { from?: string; to?: string; teamId?: string | number | undefined };
+}
+
+const isBareDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+/** A bare date says "today" / "3d ago"; a real instant says "2 hr. ago" and carries the exact time as a tooltip. */
+function LastSeen({ value, prefix }: { value: string; prefix: string }) {
+  if (isBareDate(value)) {
+    return (
+      <span className="shrink-0 text-[10.5px] text-muted" title={`${prefix} ${value}`}>
+        {prefix} {relativeDate(value)}
+      </span>
+    );
+  }
+  return (
+    <span className="shrink-0 text-[10.5px] text-muted" title={`${prefix} ${relativeDateTime(value)}`}>
+      {prefix} {relativeIso(value)}
+    </span>
+  );
 }
 
 const fmtByFormat = (value: number, format: 'number' | 'cents' | 'pct'): string =>
@@ -162,11 +180,7 @@ function BreakdownRow({
           <div className="truncate text-sm font-medium">{row.name}</div>
           {row.email && <div className="truncate text-[11px] text-muted">{row.email}</div>}
         </div>
-        {row.lastDate && (
-          <span className="shrink-0 text-[10.5px] text-muted">
-            {relativeIso(row.lastDate)}
-          </span>
-        )}
+        {row.lastDate && <LastSeen value={row.lastDate} prefix="last event" />}
       </div>
       {metrics.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
@@ -197,9 +211,11 @@ function InactiveRow({ row }: { row: BreakdownUserRow }) {
         <div className="truncate text-[13px] font-medium">{row.name}</div>
         {row.email && <div className="truncate text-[10.5px] text-muted">{row.email}</div>}
       </div>
-      <span className="shrink-0 text-[10.5px] text-muted">
-        {row.lastDate ? `last seen ${relativeIso(row.lastDate)}` : 'never active'}
-      </span>
+      {row.lastDate ? (
+        <LastSeen value={row.lastDate} prefix="last event" />
+      ) : (
+        <span className="shrink-0 text-[10.5px] text-muted">never active</span>
+      )}
     </Link>
   );
 }
