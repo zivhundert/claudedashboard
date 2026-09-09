@@ -25,7 +25,7 @@ import {
 } from '@/lib/queries';
 import { BreakdownDrawer, type BreakdownTarget } from '@/components/BreakdownDrawer';
 import { useChartTheme, asTipArray } from '@/lib/chartTheme';
-import { bucketRows, sumBy } from '@/lib/time';
+import { bucketRange, bucketRows, sumBy } from '@/lib/time';
 import {
   fmtBucket,
   fmtCost,
@@ -91,7 +91,22 @@ export default function OrgOverview() {
           onRetry={() => void overviewQ.refetch()}
           isEmpty={!!ov && ov.daily.length === 0}
         >
-          {(ref) => <ActivityTrend instanceRef={ref} daily={ov?.daily ?? []} gran={gran} partial={partial} />}
+          {(ref) => (
+            <ActivityTrend
+              instanceRef={ref}
+              daily={ov?.daily ?? []}
+              gran={gran}
+              partial={partial}
+              onBucketClick={(bucket) =>
+                setDrill({
+                  dimension: 'active-users',
+                  entity: '',
+                  title: `Active · ${fmtBucket(bucket, gran)}`,
+                  range: bucketRange(bucket, gran, from, to),
+                })
+              }
+            />
+          )}
         </ChartCard>
 
         <ChartCard

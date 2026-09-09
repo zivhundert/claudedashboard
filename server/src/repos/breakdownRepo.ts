@@ -120,7 +120,16 @@ export interface BreakdownResult {
 }
 
 export class BreakdownRepo {
-  constructor(private readonly db: Db) {}
+  /**
+   * @param rosterScoped true when the data source has an authoritative roster
+   *   (console/enterprise): "everyone" means in_roster=1. Telemetry mode has
+   *   no roster, so "everyone" is every observed person instead — the same
+   *   denominator the Overview uses.
+   */
+  constructor(
+    private readonly db: Db,
+    private readonly rosterScoped = true,
+  ) {}
 
   query(
     dimension: BreakdownDimension,
@@ -164,6 +173,35 @@ export class BreakdownRepo {
       columns: spec.metrics.map(({ key, label, format }) => ({ key, label, format })),
       rows: rows.map((r) => this.toUserRow(r, spec.metrics)),
     };
+  }
+
+  /**
+   * Rostered people (the Overview's denominator) with no usage_daily row in
+   * range — the "not active" half of an Activity-trend bucket drill-down.
+   */
+  inactiveUsers(from: string, to: string, teamId?: number): BreakdownUserRow[] {
+    let where = this.rosterScoped
+      ? `u.actor_type = 'user' AND u.in_roster = 1`
+      : `u.actor_type = 'user' AND (u.in_roster = 1 OR u.first_seen_date IS NOT NULL OR u.email IS NOT NULL)`;
+    const params: Record<string, unknown> = { from, to };
+    if (teamId !== undefined) {
+      where += ' AND u.team_id = @teamId';
+      params['teamId'] = teamId;
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT u.id AS user_id, u.name AS name, u.email AS email, u.team_id AS team_id,
+                u.last_seen_date AS last_date
+         FROM users u
+         WHERE ${where}
+           AND NOT EXISTS (
+             SELECT 1 FROM usage_daily d
+             WHERE d.user_id = u.id AND d.date BETWEEN @from AND @to
+           )
+         ORDER BY u.name COLLATE NOCASE`,
+      )
+      .all(params) as RawRow[];
+    return rows.map((r) => this.toUserRow(r, []));
   }
 
   /** Current-state dimension: who runs Claude Code version @entity right now. */

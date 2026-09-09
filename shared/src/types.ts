@@ -782,6 +782,11 @@ export interface BreakdownResponse {
   columns: BreakdownColumn[];
   /** sorted by the first column's metric, descending */
   rows: BreakdownUserRow[];
+  /**
+   * 'active-users' only: rostered people in scope with NO activity in the
+   * range — the complement of `rows`, so rows + inactive = the roster.
+   */
+  inactive?: BreakdownUserRow[];
 }
 
 // ---------------------------------------------------------------------------

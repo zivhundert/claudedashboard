@@ -94,6 +94,24 @@ export function bucketKey(date: string, gran: Granularity): string {
   return dt.minus({ days: dow }).toISODate() ?? date;
 }
 
+/**
+ * The calendar window a bucket key covers, clamped to the selected range so the
+ * drill-down matches exactly what the bar summed: a day is itself, a week runs
+ * Sunday..Saturday, a month 'YYYY-MM' its first..last day.
+ */
+export function bucketRange(bucket: string, gran: Granularity, from: string, to: string): { from: string; to: string } {
+  let start = bucket;
+  let end = bucket;
+  if (gran === 'week') {
+    end = DateTime.fromISO(bucket, { zone: 'utc' }).plus({ days: 6 }).toISODate() ?? bucket;
+  } else if (gran === 'month') {
+    const dt = DateTime.fromISO(`${bucket}-01`, { zone: 'utc' });
+    start = dt.toISODate() ?? bucket;
+    end = dt.endOf('month').toISODate() ?? bucket;
+  }
+  return { from: start < from ? from : start, to: end > to ? to : end };
+}
+
 export interface Bucket<T> {
   bucket: string;
   rows: T[];

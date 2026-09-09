@@ -40,7 +40,7 @@ export function createRepos(db: Db, opts: { rosterScoped: boolean }): Repos {
     orgSummaries: new OrgSummaryRepo(db),
     otel: new OtelRepo(db),
     otelPacks: new OtelPacksRepo(db),
-    breakdown: new BreakdownRepo(db),
+    breakdown: new BreakdownRepo(db, opts.rosterScoped),
   };
 }
 

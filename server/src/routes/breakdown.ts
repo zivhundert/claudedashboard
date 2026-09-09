@@ -28,6 +28,10 @@ export function registerBreakdownRoutes(app: FastifyInstance, ctx: AppContext): 
       dimension === 'active-hour' && /^\d{4}-\d{2}-\d{2}T/.test(entity)
         ? { from: entity.slice(0, 10), to: entity.slice(0, 10) }
         : { from: q.from, to: q.to };
-    return { dimension, entity, range, columns, rows };
+    const out: BreakdownResponse = { dimension, entity, range, columns, rows };
+    if (dimension === 'active-users') {
+      out.inactive = ctx.repos.breakdown.inactiveUsers(q.from, q.to, q.teamId);
+    }
+    return out;
   });
 }

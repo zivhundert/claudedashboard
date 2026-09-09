@@ -52,16 +52,19 @@ export function ActivityTrend({
   gran,
   partial,
   height = 'h-72',
+  onBucketClick,
 }: {
   instanceRef: ChartRef;
   daily: OverviewDailyPoint[];
   gran: Granularity;
   partial: Set<string>;
   height?: string;
+  /** click on a bar/point → the bucket key ('YYYY-MM-DD' day/week start, 'YYYY-MM' month) */
+  onBucketClick?: ((bucket: string) => void) | undefined;
 }) {
   const t = useChartTheme();
+  const agg = useMemo(() => aggregateDaily(daily, gran, partial), [daily, gran, partial]);
   const option = useMemo<EChartsOption>(() => {
-    const agg = aggregateDaily(daily, gran, partial);
     return {
       textStyle: { color: t.fg, fontFamily: 'inherit' },
       tooltip: {
@@ -102,6 +105,7 @@ export function ActivityTrend({
           name: 'Sessions',
           type: 'bar',
           barMaxWidth: 26,
+          cursor: onBucketClick ? 'pointer' : 'default',
           data: agg.map((a) => ({
             value: a.sessions,
             itemStyle: {
@@ -129,6 +133,17 @@ export function ActivityTrend({
         },
       ],
     };
-  }, [daily, gran, partial, t]);
-  return <EChart option={option} instanceRef={instanceRef} className={height} />;
+  }, [agg, gran, t, onBucketClick]);
+  return (
+    <EChart
+      option={option}
+      instanceRef={instanceRef}
+      className={height}
+      onClickPoint={(p) => {
+        if (!onBucketClick || typeof p.dataIndex !== 'number') return;
+        const b = agg[p.dataIndex];
+        if (b) onBucketClick(b.bucket);
+      }}
+    />
+  );
 }

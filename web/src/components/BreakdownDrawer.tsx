@@ -6,7 +6,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users } from 'lucide-react';
+import { Users, UserX } from 'lucide-react';
 import type { BreakdownDimension, BreakdownUserRow } from '@dash/shared';
 import { useBreakdown } from '@/lib/queries';
 import { fmtCost, fmtNumber, fmtPct, relativeIso } from '@/lib/format';
@@ -21,6 +21,8 @@ export interface BreakdownTarget {
   entity: string;
   /** drawer heading, e.g. "MCP server · jira" */
   title: string;
+  /** overrides the page range — e.g. one clicked bucket of a trend chart */
+  range?: { from: string; to: string };
 }
 
 interface BreakdownDrawerProps {
@@ -37,8 +39,10 @@ function csvEscape(v: string): string {
 }
 
 export function BreakdownDrawer({ target, onClose, range }: BreakdownDrawerProps) {
-  const q = useBreakdown(target?.dimension ?? null, target?.entity ?? '', range);
+  const effective = target?.range ? { ...range, from: target.range.from, to: target.range.to } : range;
+  const q = useBreakdown(target?.dimension ?? null, target?.entity ?? '', effective);
   const data = q.data;
+  const [showInactive, setShowInactive] = useState(true);
 
   const exportCsv = () => {
     if (!data || !target) return;
@@ -78,8 +82,9 @@ export function BreakdownDrawer({ target, onClose, range }: BreakdownDrawerProps
         <>
           <div className="mb-3 flex items-center justify-between text-xs text-muted">
             <span>
-              {fmtNumber(data.rows.length)} {data.rows.length === 1 ? 'person' : 'people'} ·{' '}
-              {data.range.from} → {data.range.to}
+              {fmtNumber(data.rows.length)} {data.inactive ? 'active' : data.rows.length === 1 ? 'person' : 'people'}
+              {data.inactive && ` · ${fmtNumber(data.inactive.length)} not active`} ·{' '}
+              {data.range.from === data.range.to ? data.range.from : `${data.range.from} → ${data.range.to}`}
             </span>
             {data.rows.length > 0 && (
               <button
@@ -92,13 +97,41 @@ export function BreakdownDrawer({ target, onClose, range }: BreakdownDrawerProps
             )}
           </div>
           {data.rows.length === 0 ? (
-            <p className="text-sm text-muted">No activity for this item in the selected range.</p>
+            <p className="text-sm text-muted">
+              {data.inactive ? 'Nobody was active in this period.' : 'No activity for this item in the selected range.'}
+            </p>
           ) : (
             <div className="space-y-2">
               {data.rows.map((r) => (
                 <BreakdownRow key={r.userId} row={r} columns={data.columns} />
               ))}
             </div>
+          )}
+          {data.inactive && (
+            <section className="mt-5">
+              <button
+                type="button"
+                onClick={() => setShowInactive((v) => !v)}
+                aria-expanded={showInactive}
+                className="mb-2 flex w-full items-center gap-1.5 text-left text-[10.5px] font-semibold uppercase tracking-wider text-muted transition-colors hover:text-fg"
+              >
+                <UserX size={12} aria-hidden="true" />
+                Not active ({fmtNumber(data.inactive.length)})
+                <span className="ml-auto text-[10px] font-normal normal-case tracking-normal">
+                  {showInactive ? 'hide' : 'show'}
+                </span>
+              </button>
+              {showInactive &&
+                (data.inactive.length === 0 ? (
+                  <p className="text-xs text-muted">Everyone on the roster was active 🎉</p>
+                ) : (
+                  <div className="space-y-1">
+                    {data.inactive.map((r) => (
+                      <InactiveRow key={r.userId} row={r} />
+                    ))}
+                  </div>
+                ))}
+            </section>
           )}
         </>
       )}
@@ -147,6 +180,26 @@ function BreakdownRow({
           ))}
         </div>
       )}
+    </Link>
+  );
+}
+
+/** Compact row for someone with no activity in the period; last seen from the roster. */
+function InactiveRow({ row }: { row: BreakdownUserRow }) {
+  const profilePath = `/user/${encodeURIComponent(row.email ?? String(row.userId))}`;
+  return (
+    <Link
+      to={profilePath}
+      className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-bg/30 px-3 py-2 opacity-80 transition-colors hover:border-accent/50 hover:opacity-100"
+    >
+      <Avatar name={row.name} size={22} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13px] font-medium">{row.name}</div>
+        {row.email && <div className="truncate text-[10.5px] text-muted">{row.email}</div>}
+      </div>
+      <span className="shrink-0 text-[10.5px] text-muted">
+        {row.lastDate ? `last seen ${relativeIso(row.lastDate)}` : 'never active'}
+      </span>
     </Link>
   );
 }
