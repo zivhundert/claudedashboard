@@ -10,6 +10,7 @@ import { registerBreakdownRoutes } from './routes/breakdown';
 import { registerCapabilityRoutes } from './routes/capabilities';
 import { registerCostRoutes } from './routes/costs';
 import { registerDimensionRoutes } from './routes/dimensions';
+import { registerEntityRoutes } from './routes/entity';
 import { registerHealthRoutes } from './routes/health';
 import { registerHeatmapRoutes } from './routes/heatmap';
 import { registerInsightRoutes } from './routes/insights';
@@ -78,6 +79,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   registerSkillRoutes(app, ctx);
   registerTelemetryPackRoutes(app, ctx);
   registerBreakdownRoutes(app, ctx);
+  registerEntityRoutes(app, ctx);
   if (ctx.env.otelPort === null) {
     await registerOtelRoutes(app, ctx); // OTLP receiver — must precede the SPA fallback
   }

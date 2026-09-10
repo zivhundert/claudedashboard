@@ -11,6 +11,7 @@ import type { ChartRef } from '@/components/TrendChart';
 import { DrillCount, type BreakdownTarget } from '@/components/BreakdownDrawer';
 import { Tip } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { EntityName } from '@/components/EntityName';
 
 // ---------------------------------------------------------------------------
 // Tool usage list (HTML bars — handles MCP chips + acceptance labels)
@@ -26,6 +27,7 @@ export function ToolUsageList({
   onDrill?: ((t: BreakdownTarget) => void) | undefined;
   limit?: number;
 }) {
+  void onDrill; // people drill-down lives inside the detail drawer now
   const top = useMemo(() => [...rows].sort((a, b) => b.uses - a.uses).slice(0, limit), [rows, limit]);
   const max = top[0]?.uses ?? 0;
   return (
@@ -42,22 +44,7 @@ export function ToolUsageList({
                   mcp
                 </span>
               )}
-              {onDrill ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onDrill({ dimension: 'tool', entity: toolName, title: `Tool · ${displayName}` })
-                  }
-                  title={`${toolName} — see who uses it`}
-                  className="truncate text-left font-mono text-[11.5px] underline decoration-dotted underline-offset-2 transition-colors hover:text-accent"
-                >
-                  {displayName}
-                </button>
-              ) : (
-                <span className="truncate font-mono text-[11.5px]" title={toolName}>
-                  {displayName}
-                </span>
-              )}
+              <EntityName kind="tool" name={toolName} label={displayName} className="font-mono text-[11.5px]" />
             </span>
             <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-fg/10">
               <span
@@ -94,9 +81,7 @@ export function PluginsList({
     <ul className="space-y-1.5 py-1">
       {sorted.map((p) => (
         <li key={p.pluginName} className="flex items-center gap-2.5">
-          <span className="w-44 truncate font-mono text-[11.5px]" title={p.pluginName}>
-            {p.pluginName}
-          </span>
+          <EntityName kind="plugin" name={p.pluginName} className="w-44 shrink-0 font-mono text-[11.5px]" />
           <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-fg/10">
             <span
               className="block h-full rounded-full bg-accent2"

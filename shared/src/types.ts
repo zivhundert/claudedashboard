@@ -738,6 +738,56 @@ export interface McpResponse {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/entity — everything we know about one skill / subagent / tool /
+// MCP server / plugin: static facts, range totals, lifecycle, daily trend,
+// related entities. The people behind it come from GET /api/breakdown.
+// ---------------------------------------------------------------------------
+
+export const ENTITY_KINDS = ['skill', 'agent', 'tool', 'mcp', 'plugin'] as const;
+export type EntityKind = (typeof ENTITY_KINDS)[number];
+
+export interface EntityFact {
+  label: string;
+  value: string;
+}
+
+export interface EntityTotal {
+  key: string;
+  label: string;
+  value: number;
+  format: 'number' | 'cents' | 'pct';
+}
+
+export interface EntityRelated {
+  kind: EntityKind;
+  name: string;
+  /** the related entity's primary metric in range (e.g. a plugin's skill's invocations) */
+  value: number;
+}
+
+export interface EntityDetailResponse {
+  kind: EntityKind;
+  name: string;
+  range: DateRange;
+  /** what the thing IS — source, kind, plugin, server… (empty when telemetry carried none) */
+  facts: EntityFact[];
+  /** headline numbers for the range */
+  totals: EntityTotal[];
+  /** all-time first/last day with activity (null when never seen) */
+  firstSeen: string | null;
+  lastSeen: string | null;
+  /** days with activity in range, and distinct people */
+  activeDays: number;
+  users: number;
+  /** primary metric per day in range */
+  dailyLabel: string;
+  daily: Array<{ date: string; value: number }>;
+  /** e.g. a plugin's skills, an MCP server's tools, a tool's server */
+  relatedLabel: string | null;
+  related: EntityRelated[];
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/breakdown — "who are the users" behind any aggregate count
 // ---------------------------------------------------------------------------
 

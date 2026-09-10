@@ -157,7 +157,7 @@ export function BreakdownDrawer({ target, onClose, range }: BreakdownDrawerProps
   );
 }
 
-function BreakdownRow({
+export function BreakdownRow({
   row,
   columns,
 }: {

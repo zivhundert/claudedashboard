@@ -1,6 +1,6 @@
 {
   "name": "claude-code-insights",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "license": "MIT",
   "author": "Ziv Hundert",
@@ -11,7 +11,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -n server,web -c blue,magenta \"pnpm --filter @dash/server dev\" \"pnpm --filter @dash/web dev\"",
-    "dev:demo": "DEMO_MODE=1 pnpm run dev",
+    "dev:demo": "DEMO_MODE=1 DB_PATH=./data/dashboard.db pnpm run dev",
     "build": "pnpm --filter @dash/shared build && pnpm --filter @dash/server build && pnpm --filter @dash/web build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --if-present test",

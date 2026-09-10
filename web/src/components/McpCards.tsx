@@ -11,6 +11,7 @@ import { StatSkeleton } from '@/components/Skeleton';
 import { DrillCount, type BreakdownTarget } from '@/components/BreakdownDrawer';
 import { Tip } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { EntityName } from '@/components/EntityName';
 
 type Drill = ((t: BreakdownTarget) => void) | undefined;
 
@@ -175,8 +176,8 @@ function ServersTable({ rows, onDrill }: { rows: McpResponse['servers']; onDrill
             const failRate = s.toolCalls > 0 ? s.toolFailures / s.toolCalls : 0;
             return (
               <tr key={s.serverName} className="border-b border-border/60 transition-colors hover:bg-fg/[0.025]">
-                <td className="max-w-52 truncate px-2.5 py-1.5 font-mono text-[12px] font-medium" title={s.serverName}>
-                  {s.serverName}
+                <td className="max-w-52 px-2.5 py-1.5 font-mono text-[12px] font-medium">
+                  <EntityName kind="mcp" name={s.serverName} />
                 </td>
                 <td className="whitespace-nowrap px-2.5 py-1.5 text-right text-[12.5px]">{fmtNumber(s.toolCalls)}</td>
                 <td
@@ -265,6 +266,7 @@ export function McpToolsCard({
 }
 
 function McpToolsList({ rows, onDrill }: { rows: McpResponse['tools']; onDrill: Drill }) {
+  void onDrill; // people drill-down lives inside the detail drawer now
   const sorted = useMemo(() => [...rows].sort((a, b) => b.uses - a.uses), [rows]);
   const max = sorted[0]?.uses ?? 0;
   return (
@@ -275,20 +277,7 @@ function McpToolsList({ rows, onDrill }: { rows: McpResponse['tools']; onDrill: 
         return (
           <li key={r.toolName} className="flex items-center gap-2.5">
             <span className="flex w-48 min-w-0 shrink-0 flex-col">
-              {onDrill ? (
-                <button
-                  type="button"
-                  onClick={() => onDrill({ dimension: 'tool', entity: r.toolName, title: `MCP tool · ${tool}` })}
-                  title={`${r.toolName} — see who uses it`}
-                  className="truncate text-left font-mono text-[11.5px] underline decoration-dotted underline-offset-2 transition-colors hover:text-accent"
-                >
-                  {tool}
-                </button>
-              ) : (
-                <span className="truncate font-mono text-[11.5px]" title={r.toolName}>
-                  {tool}
-                </span>
-              )}
+              <EntityName kind="tool" name={r.toolName} label={tool} className="font-mono text-[11.5px]" />
               <span className="truncate text-[9.5px] text-muted" title={server}>
                 {server}
               </span>

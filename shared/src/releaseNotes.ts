@@ -12,6 +12,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '1.0.5',
+    date: '2026-09-10',
+    highlights: [
+      'Click any skill, subagent, tool, MCP server or plugin name for its detail card: what it is (source, kind, plugin, marketplace), numbers for the range, first/last seen, daily trend, related items you can hop to, and the people behind it.',
+      'Telemetry now records where each skill comes from (source, definition kind, plugin, marketplace) — see “What’s collected”.',
+      'Activity-trend drawer: people sorted by most recent activity, with each person’s real last event time.',
+    ],
+  },
+  {
     version: '1.0.4',
     date: '2026-09-09',
     highlights: [

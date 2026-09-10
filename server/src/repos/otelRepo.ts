@@ -19,6 +19,17 @@ export interface SkillDelta {
   costCents: number;
 }
 
+/** Static facts about a skill seen in this batch (attrs of skill_activated). */
+export interface SkillMetaDelta {
+  skillName: string;
+  source: string | null;
+  kind: string | null;
+  pluginName: string | null;
+  marketplaceName: string | null;
+  /** full ISO of the latest event carrying these facts */
+  seenAt: string;
+}
+
 export interface AgentDelta {
   date: string;
   userId: number;
@@ -97,6 +108,7 @@ export interface SessionDelta {
 
 export interface OtelIngestBatch {
   skills: SkillDelta[];
+  skillMeta: SkillMetaDelta[];
   agents: AgentDelta[];
   tools: ToolDelta[];
   activityDaily: ActivityDailyDelta[];
@@ -318,9 +330,22 @@ export class OtelRepo {
          rejected = rejected + excluded.rejected`,
     );
 
+    const upsertSkillMeta = this.db.prepare(
+      `INSERT INTO otel_skill_meta (skill_name, source, kind, plugin_name, marketplace_name, first_seen_at, last_seen_at)
+       VALUES (@skillName, @source, @kind, @pluginName, @marketplaceName, @seenAt, @seenAt)
+       ON CONFLICT (skill_name) DO UPDATE SET
+         source           = COALESCE(excluded.source, source),
+         kind             = COALESCE(excluded.kind, kind),
+         plugin_name      = COALESCE(excluded.plugin_name, plugin_name),
+         marketplace_name = COALESCE(excluded.marketplace_name, marketplace_name),
+         first_seen_at    = MIN(first_seen_at, excluded.first_seen_at),
+         last_seen_at     = MAX(last_seen_at, excluded.last_seen_at)`,
+    );
+
     const txn = this.db.transaction((b: OtelIngestBatch): boolean => {
       if (dedupHash !== undefined && !this.tryMarkIngest(dedupHash)) return false;
       for (const row of b.skills) upsertSkill.run(row);
+      for (const row of b.skillMeta) upsertSkillMeta.run(row);
       for (const row of b.agents) upsertAgent.run(row);
       for (const row of b.tools) upsertTool.run(row);
       // telemetry-pack tables fed by the logs walker (additive, every mode)

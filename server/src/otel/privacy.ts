@@ -79,7 +79,7 @@ function balancedEvents(): EventPolicy[] {
     ),
     ev('api_request', 'Model, token counts, cost and duration; skill/agent names for cost attribution.', 'keep'),
     ev('api_error', 'Model, status code and duration of failed API calls.', 'keep'),
-    ev('skill_activated', 'Skill name and how it was triggered.', 'keep'),
+    ev('skill_activated', 'Skill name, how it was triggered, and where it came from (source, kind, plugin, marketplace).', 'keep'),
     ev('at_mention', 'Counted without detail — mention target attributes are dropped.', 'drop', {
       ...IDENTITY_KEEP,
     }),

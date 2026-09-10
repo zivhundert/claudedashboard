@@ -1,20 +1,22 @@
 import type {
   ActivityResponse,
-  BreakdownDimension,
-  BreakdownResponse,
   AdoptionResponse,
   ApiKeysResponse,
   AppSettings,
+  BreakdownDimension,
+  BreakdownResponse,
   CapabilitiesResponse,
   CostsResponse,
   DimensionsResponse,
   EcosystemResponse,
-  McpResponse,
+  EntityDetailResponse,
+  EntityKind,
   GovernanceResponse,
   Granularity,
   HeatmapResponse,
   InsightsResponse,
   LeaderboardResponse,
+  McpResponse,
   OverviewResponse,
   ReliabilityResponse,
   SkillsResponse,
@@ -180,6 +182,9 @@ export const api = {
     ),
 
   /** telemetry packs — MCP servers / plugins / versions / model mix */
+  entityDetail: (kind: EntityKind, name: string, q: RangeQ) =>
+    request<EntityDetailResponse>(`/api/entity${qs({ kind, name, from: q.from, to: q.to, teamId: q.teamId })}`),
+
   breakdown: (dimension: BreakdownDimension, entity: string, q: RangeQ) =>
     request<BreakdownResponse>(
       `/api/breakdown${qs({ dimension, entity, from: q.from, to: q.to, teamId: q.teamId })}`,

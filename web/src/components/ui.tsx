@@ -154,17 +154,25 @@ export function Sheet({
   onOpenChange,
   title,
   children,
+  className,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: ReactNode;
   children: ReactNode;
+  /** width override, e.g. 'w-[min(94vw,560px)]' */
+  className?: string;
 }) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
-        <DialogPrimitive.Content className="sheet-in fixed right-0 top-0 z-50 h-full w-[min(94vw,440px)] overflow-y-auto border-l border-border bg-card p-5 shadow-2xl">
+        <DialogPrimitive.Content
+          className={cn(
+            'sheet-in fixed right-0 top-0 z-50 h-full w-[min(94vw,440px)] overflow-y-auto border-l border-border bg-card p-5 shadow-2xl',
+            className,
+          )}
+        >
           <div className="mb-4 flex items-center justify-between">
             <DialogPrimitive.Title className="text-base font-semibold">{title}</DialogPrimitive.Title>
             <DialogPrimitive.Close asChild>

@@ -25,6 +25,8 @@ import { TelemetrySetupCard } from '@/components/TelemetrySetupCard';
 import { WhatsCollectedLink } from '@/components/TelemetryPolicyDialog';
 import { Segmented, Tip } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { EntityName } from '@/components/EntityName';
+import { useEntityStore } from '@/state/entity';
 import { ModelMixChart, PluginsList, ToolUsageList, VersionDriftBars } from '@/components/EcosystemCards';
 
 /** Telemetry replaces non-allowlisted skill names with these placeholders. */
@@ -252,7 +254,7 @@ function TopSkillsCard({
       title="Skills"
       chartId="top-skills"
       metricKey="skillsUsage"
-      subtitle="All skills in range — slash commands and proactive activations"
+      subtitle="All skills in range — click a bar for the skill’s details"
       actions={
         <div className="flex items-center gap-2">
           <input
@@ -300,10 +302,15 @@ function TopSkillsChart({
   mode: SkillMode;
 }) {
   const t = useChartTheme();
-  const option = useMemo<EChartsOption>(() => {
+  const openEntity = useEntityStore((s) => s.open);
+  const sorted = useMemo(() => {
     const metric = (r: SkillUsageRow) => (mode === 'cost' ? r.costCents : r.invocations);
     // ascending so the biggest skill renders at the top of the category axis
-    const top = [...rows].sort((a, b) => metric(a) - metric(b));
+    return [...rows].sort((a, b) => metric(a) - metric(b));
+  }, [rows, mode]);
+  const option = useMemo<EChartsOption>(() => {
+    const metric = (r: SkillUsageRow) => (mode === 'cost' ? r.costCents : r.invocations);
+    const top = sorted;
     const fmtVal = mode === 'cost' ? fmtCost : fmtNumber;
     return {
       textStyle: { color: t.fg, fontFamily: 'inherit' },
@@ -347,6 +354,7 @@ function TopSkillsChart({
         {
           type: 'bar',
           barMaxWidth: 16,
+          cursor: 'pointer',
           label: {
             show: true,
             position: 'right',
@@ -365,12 +373,20 @@ function TopSkillsChart({
         },
       ],
     };
-  }, [rows, mode, t]);
+  }, [sorted, mode, t]);
   // every skill gets a row, so the card grows with the list instead of clipping it
   const height = Math.max(320, rows.length * 26 + 40);
   return (
     <div style={{ height }}>
-      <EChart option={option} instanceRef={instanceRef} className="h-full" />
+      <EChart
+        option={option}
+        instanceRef={instanceRef}
+        className="h-full"
+        onClickPoint={(p) => {
+          const row = typeof p.dataIndex === 'number' ? sorted[p.dataIndex] : undefined;
+          if (row) openEntity('skill', row.skillName);
+        }}
+      />
     </div>
   );
 }
@@ -506,8 +522,8 @@ function AgentsTable({
           const lowSuccess = a.successRate !== null && a.successRate < 0.7;
           return (
             <tr key={a.subagentType} className="border-b border-border/60 transition-colors hover:bg-fg/[0.025]">
-              <td className="max-w-44 truncate px-2.5 py-1.5 text-[12.5px] font-medium" title={a.subagentType}>
-                {a.subagentType}
+              <td className="max-w-44 px-2.5 py-1.5 text-[12.5px] font-medium">
+                <EntityName kind="agent" name={a.subagentType} />
               </td>
               <td className="whitespace-nowrap px-2.5 py-1.5 text-right text-[12.5px]">
                 {fmtNumber(a.invocations)}
@@ -776,8 +792,8 @@ function McpServersTable({
             const failRate = s.toolCalls > 0 ? s.toolFailures / s.toolCalls : 0;
             return (
               <tr key={s.serverName} className="border-b border-border/60 transition-colors hover:bg-fg/[0.025]">
-                <td className="max-w-44 truncate px-2.5 py-1.5 font-mono text-[12px] font-medium" title={s.serverName}>
-                  {s.serverName}
+                <td className="max-w-44 px-2.5 py-1.5 font-mono text-[12px] font-medium">
+                  <EntityName kind="mcp" name={s.serverName} />
                 </td>
                 <td className="whitespace-nowrap px-2.5 py-1.5 text-right text-[12.5px]">
                   {fmtNumber(s.toolCalls)}

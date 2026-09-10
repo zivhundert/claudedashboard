@@ -201,9 +201,35 @@ function emailOf(name: string): string {
 // ---------------------------------------------------------------------------
 
 function main(): void {
+  // Only an explicit shell DB_PATH may redirect the seed. The .env DB_PATH is
+  // the REAL database in every non-demo setup — loading it here once wiped a
+  // live telemetry db — so read the shell value before .env is merged in.
+  const explicitDbPath = process.env['DB_PATH'];
   loadDotEnv();
+  process.env['DB_PATH'] = explicitDbPath ?? './data/dashboard.db';
   const dbPath = process.env['DB_PATH'] ?? './data/dashboard.db';
   const db = openDb(dbPath);
+  // Safety: a database with real (non-example) people is never a demo db.
+  const realUsers = (() => {
+    try {
+      return (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM users WHERE actor_type = 'user' AND email IS NOT NULL AND email NOT LIKE '%@example.dev'`,
+          )
+          .get() as { n: number }
+      ).n;
+    } catch {
+      return 0; // no users table yet — fresh file
+    }
+  })();
+  if (realUsers > 0 && !process.argv.includes('--force')) {
+    console.error(
+      `\nRefusing to seed ${resolveFromRepoRoot(dbPath)}: it holds ${realUsers} real user(s). ` +
+        `Seeding RESETS the database. Point DB_PATH at a demo file, or pass --force if you really mean it.\n`,
+    );
+    process.exit(1);
+  }
   migrate(db);
   const repos = createRepos(db, { rosterScoped: true });
 
@@ -309,6 +335,7 @@ function main(): void {
         addedAt: null,
         inRoster: 0,
         teamId: null,
+        country: null,
       }).lastInsertRowid,
     ),
   }));

@@ -45,6 +45,7 @@ import type {
   ReliabilityDelta,
   SessionDelta,
   SkillDelta,
+  SkillMetaDelta,
   ToolDelta,
 } from '../repos/otelRepo';
 
@@ -68,6 +69,7 @@ function hourIsoOfIso(iso: string): string {
 
 class BatchAgg {
   readonly skills = new Map<string, SkillDelta>();
+  readonly skillMeta = new Map<string, SkillMetaDelta>();
   readonly agents = new Map<string, AgentDelta>();
   readonly tools = new Map<string, ToolDelta>();
   readonly activityDaily = new Map<string, ActivityDailyDelta>();
@@ -90,6 +92,23 @@ class BatchAgg {
       this.skills.set(key, d);
     }
     return d;
+  }
+
+  /** Remember what a skill is; later events fill blanks and advance seenAt. */
+  skillFacts(
+    skillName: string,
+    facts: { source: string | null; kind: string | null; pluginName: string | null; marketplaceName: string | null },
+    iso: string,
+  ): void {
+    const prev = this.skillMeta.get(skillName);
+    this.skillMeta.set(skillName, {
+      skillName,
+      source: facts.source ?? prev?.source ?? null,
+      kind: facts.kind ?? prev?.kind ?? null,
+      pluginName: facts.pluginName ?? prev?.pluginName ?? null,
+      marketplaceName: facts.marketplaceName ?? prev?.marketplaceName ?? null,
+      seenAt: prev && prev.seenAt > iso ? prev.seenAt : iso,
+    });
   }
 
   agent(date: string, userId: number, subagentType: string): AgentDelta {
@@ -233,6 +252,7 @@ class BatchAgg {
   toBatch(): OtelIngestBatch {
     return {
       skills: [...this.skills.values()],
+      skillMeta: [...this.skillMeta.values()],
       agents: [...this.agents.values()],
       tools: [...this.tools.values()],
       activityDaily: [...this.activityDaily.values()],
@@ -357,8 +377,19 @@ export async function registerOtelRoutes(app: FastifyInstance, ctx: AppContext):
 
     switch (eventName) {
       case 'claude_code.skill_activated': {
-        const d = agg.skill(date, userId, getString(attrs, 'skill.name') ?? 'unknown');
+        const skillName = getString(attrs, 'skill.name') ?? 'unknown';
+        const d = agg.skill(date, userId, skillName);
         d.invocations += 1;
+        agg.skillFacts(
+          skillName,
+          {
+            source: getString(attrs, 'skill.source'),
+            kind: getString(attrs, 'skill.kind'),
+            pluginName: getString(attrs, 'plugin.name'),
+            marketplaceName: getString(attrs, 'marketplace.name'),
+          },
+          iso,
+        );
         const trigger = getString(attrs, 'invocation_trigger');
         if (trigger === 'user-slash') d.userSlash += 1;
         else if (trigger === 'claude-proactive') d.proactive += 1;

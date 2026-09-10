@@ -36,6 +36,7 @@ import { SectionHeader } from '@/components/SectionHeader';
 import { AcceptanceByToolChart, perToolTotal } from '@/components/AcceptanceByTool';
 import { Avatar } from '@/components/Avatar';
 import { CountryFlag } from '@/components/CountryFlag';
+import { EntityName } from '@/components/EntityName';
 import { SegmentChip } from '@/components/SegmentChip';
 import { ConfidenceDot } from '@/components/ConfidenceDot';
 import { DeltaChip } from '@/components/DeltaChip';
@@ -584,15 +585,12 @@ function SkillsAgentsCard({ userId, from, to }: { userId: number; from: string; 
             <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
               {topSkills.map((s) => (
                 <li key={s.skillName} className="flex items-center gap-2.5">
-                  <span
-                    className={cn(
-                      'w-44 truncate font-mono text-[11.5px]',
-                      isRedactedSkill(s.skillName) && 'text-muted',
-                    )}
-                    title={isRedactedSkill(s.skillName) ? 'name redacted by telemetry settings' : s.skillName}
-                  >
-                    {s.skillName}
-                  </span>
+                  <EntityName
+                    kind="skill"
+                    name={s.skillName}
+                    className={cn('w-44 shrink-0 font-mono text-[11.5px]', isRedactedSkill(s.skillName) && 'text-muted')}
+                    title={isRedactedSkill(s.skillName) ? 'name redacted by telemetry settings — details' : undefined}
+                  />
                   <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-fg/10">
                     <span
                       className="block h-full rounded-full bg-accent"
@@ -620,9 +618,7 @@ function SkillsAgentsCard({ userId, from, to }: { userId: number; from: string; 
               <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
                 {agents.map((a) => (
                   <li key={a.subagentType} className="flex items-center gap-2.5">
-                    <span className="w-40 truncate font-mono text-[11.5px]" title={a.subagentType}>
-                      {a.subagentType}
-                    </span>
+                    <EntityName kind="agent" name={a.subagentType} className="w-40 shrink-0 font-mono text-[11.5px]" />
                     <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-fg/10">
                       <span
                         className="block h-full rounded-full bg-accent"

@@ -31,6 +31,7 @@ import { RangePicker, GranularityControl } from '@/components/RangePicker';
 import { SyncPill } from '@/components/SyncPill';
 import { PersonaSwitcher } from '@/components/PersonaSwitcher';
 import { ReleaseNotesDialog } from '@/components/ReleaseNotesDialog';
+import { EntityDetailDrawer } from '@/components/EntityDetailDrawer';
 import { Toaster } from '@/components/Toaster';
 import { Tip } from '@/components/ui';
 import { displayZone, setDisplayZone } from '@/lib/time';
@@ -277,6 +278,7 @@ export function AppShell() {
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <GuideDrawer open={guideOpen} onOpenChange={setGuideOpen} />
       <ReleaseNotesDialog open={notesOpen} onOpenChange={setNotesOpen} currentVersion={version} />
+      <EntityDetailDrawer />
       <Toaster />
     </div>
   );

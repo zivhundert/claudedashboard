@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type {
-  AppSettings,
-  BreakdownDimension,
-  Granularity,
-  SyncJobType,
-  SyncLogLine,
-} from '@dash/shared';
+import type { AppSettings, BreakdownDimension, EntityKind, Granularity, SyncJobType, SyncLogLine } from '@dash/shared';
 import { api, type RangeQ } from '@/lib/api';
 
 const key = (q: RangeQ) => [q.from ?? null, q.to ?? null, q.teamId != null ? String(q.teamId) : null];
@@ -169,6 +163,14 @@ export function useMcp(q: RangeQ & { userId?: number | undefined }, enabled = tr
     queryKey: packKey('telemetry-mcp', q),
     queryFn: () => api.telemetryMcp(q),
     enabled,
+  });
+}
+
+export function useEntityDetail(kind: EntityKind | null, name: string, q: RangeQ) {
+  return useQuery({
+    queryKey: ['entity', kind, name, q.from, q.to, q.teamId ?? null],
+    queryFn: () => api.entityDetail(kind as EntityKind, name, q),
+    enabled: kind !== null && name !== '',
   });
 }
 

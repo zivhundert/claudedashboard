@@ -34,7 +34,7 @@ In **every** mode:
 | `tool_decision` | which tool was allowed/rejected, and by what (config, hook, user) | — |
 | `api_request` | model, token counts, cost, duration; skill/agent names for cost attribution | — |
 | `api_error` | model, status code, duration | — |
-| `skill_activated` | skill name + how it was triggered (typed `/`, proactive, nested) | — |
+| `skill_activated` | skill name, how it was triggered (typed `/`, proactive, nested), and where it came from (source, definition kind, plugin, marketplace) | — |
 | `at_mention` | counted only | mention target |
 | everything else | operational counters and dimension names | prompt text; `tool_parameters` filtered |
 
