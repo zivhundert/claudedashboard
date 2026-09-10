@@ -236,6 +236,7 @@ function main(): void {
   // --- wipe data tables (FK-safe order) ---
   for (const table of [
     'otel_skill_daily',
+    'otel_skill_meta',
     'otel_agent_daily',
     'otel_tool_daily',
     'otel_activity_daily',
@@ -818,6 +819,23 @@ function main(): void {
     `INSERT INTO otel_skill_daily (date, user_id, skill_name, invocations, user_slash, proactive, nested, cost_cents)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
+  // What each seeded skill IS (mirrors otel_skill_meta learned from skill_activated attrs)
+  const SKILL_META: Record<string, [source: string, kind: string, plugin: string | null, marketplace: string | null]> = {
+    'code-review': ['plugin', 'skill', 'fde', 'thetaray-plugins'],
+    verify: ['project', 'skill', null, null],
+    commit: ['bundled', 'skill', null, null],
+    'deep-research': ['plugin', 'skill', 'anthropic-skills', 'claude-plugins-official'],
+    graphify: ['user', 'skill', null, null],
+    'fix-tests': ['project', 'skill', null, null],
+  };
+  const insertSkillMeta = db.prepare(
+    `INSERT OR REPLACE INTO otel_skill_meta (skill_name, source, kind, plugin_name, marketplace_name, first_seen_at, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const [name, [source, kind, plugin, marketplace]] of Object.entries(SKILL_META)) {
+    insertSkillMeta.run(name, source, kind, plugin, marketplace, `${addDays(today, -OTEL_DAYS)}T09:00:00.000Z`, `${today}T09:00:00.000Z`);
+  }
+
   const insertOtelAgent = db.prepare(
     `INSERT INTO otel_agent_daily (date, user_id, subagent_type, invocations, success, failure, cost_cents)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
