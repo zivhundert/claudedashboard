@@ -102,10 +102,17 @@ function splitMcp(toolName: string): { server: string; tool: string } | null {
   return sep > 0 ? { server: rest.slice(0, sep), tool: rest.slice(sep + 2) } : { server: rest, tool: rest };
 }
 
+/** skill.source values Claude Code emits (settings-scope names) → what a reviewer reads. */
 const SOURCE_LABELS: Record<string, string> = {
   builtin: 'Built-in',
   bundled: 'Bundled with Claude Code',
   plugin: 'Plugin',
+  userSettings: 'User skills folder (~/.claude/skills)',
+  projectSettings: 'Project skills folder (.claude/skills, checked in)',
+  localSettings: 'Project-local skills folder (.claude/skills, not checked in)',
+  policySettings: 'Managed by the org (managed settings)',
+  flagSettings: 'Passed on the command line (--settings)',
+  // older / seed spellings
   user: 'User skills folder (~/.claude/skills)',
   project: 'Project skills folder (.claude/skills)',
   managed: 'Managed by the org',
