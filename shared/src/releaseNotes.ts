@@ -18,6 +18,7 @@ export const RELEASE_NOTES: readonly ReleaseNote[] = [
       'Personal page → Coach: 3–5 AI-written recommendations grounded in your own numbers vs org medians and score targets, each citing the metrics it used, a Claude Code practice to try, and the score it lifts — plus a “where you stand” line and your strengths.',
       'Coach notes are cached per person for a day; Regenerate asks Claude again (rate-limited). Needs a Claude deployment on Microsoft Foundry (FOUNDRY_API_KEY) — the card does not exist otherwise.',
       '“What’s collected” now states when the AI coach is on, which model, and that only numbers are sent — never prompts, code or file names.',
+      'Admin → Settings → AI coach prompt: rewrite the coaching guidance (tone, priorities, house practices) behind an admin password; the output format stays locked and cached notes are cleared on save.',
     ],
   },
   {

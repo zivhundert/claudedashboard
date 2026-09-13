@@ -21,9 +21,10 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { AiConfig } from '../env';
 import type { Repos } from '../repos';
 import { FoundryCoach, AiUpstreamError, type GenerationUsage } from '../ai/foundryClient';
-import { SYSTEM_PROMPT } from '../ai/prompt';
+import { buildSystemPrompt } from '../ai/prompt';
 import { RECOMMENDATIONS_JSON_SCHEMA, parsePayload } from '../ai/recommendationSchema';
 import { nowIso } from '../util/time';
+import { effectiveGuidance, guidanceHash } from './coachPrompt';
 import { buildRecommendationInputForUser, type AssembledInput } from './recommendationInput';
 import type { RangeParams } from './scoring';
 
@@ -95,16 +96,23 @@ export class RecommendationService {
 
     if (row && !force && age < softTtlMs) return this.fromRow(row, true, null);
 
+    // The cache key covers the numbers AND the prompt in force: an admin edit
+    // of the guidance regenerates on the next view even if nothing else moved.
+    const promptHash = guidanceHash(this.repos);
+    const combined = (inputHash: string) => `${inputHash}:${promptHash}`;
+
     let assembled: AssembledInput | null = null;
     if (row && !force && age < ttlMs) {
       assembled = buildRecommendationInputForUser(this.repos, userId, range);
-      if (assembled && assembled.hash === row.input_hash) return this.fromRow(row, true, null);
+      if (assembled && combined(assembled.hash) === row.input_hash) return this.fromRow(row, true, null);
     }
 
     if (force) this.checkRegenerateBudget(key);
     assembled ??= buildRecommendationInputForUser(this.repos, userId, range);
     if (!assembled) throw new AiUpstreamError(404, 'user_not_found');
-    const { input, hash } = assembled;
+    const { input } = assembled;
+    const hash = combined(assembled.hash);
+    const systemPrompt = buildSystemPrompt(effectiveGuidance(this.repos));
 
     // Nothing happened in this range: say so without paying for a model call.
     if (input.activity.sessions === 0) {
@@ -113,7 +121,7 @@ export class RecommendationService {
 
     const started = Date.now();
     try {
-      const gen = await this.coach.generateJson(SYSTEM_PROMPT, stableStringify(input), RECOMMENDATIONS_JSON_SCHEMA as unknown as Record<string, unknown>);
+      const gen = await this.coach.generateJson(systemPrompt, stableStringify(input), RECOMMENDATIONS_JSON_SCHEMA as unknown as Record<string, unknown>);
       const payload = sanitizeRecommendations(parsePayload(gen.json), input);
       if (!payload.dataThin && payload.recommendations.length < MIN_RECOMMENDATIONS) {
         throw new AiUpstreamError(502, `only ${payload.recommendations.length} usable recommendations came back`);

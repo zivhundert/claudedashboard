@@ -7,6 +7,7 @@ import { toast } from '@/state/toast';
 import { ErrorCard } from '@/components/ErrorCard';
 import { Skeleton } from '@/components/Skeleton';
 import { TelemetryPolicyDialog } from '@/components/TelemetryPolicyDialog';
+import { CoachPromptEditor } from '@/components/CoachPromptEditor';
 import { Button, Field, InfoPopover, inputCls } from '@/components/ui';
 
 export default function AdminSettings() {
@@ -22,7 +23,7 @@ export default function AdminSettings() {
 
   if (settingsQ.isLoading) {
     return (
-      <div className="mx-auto max-w-xl space-y-4">
+      <div className="mx-auto max-w-2xl space-y-4">
         <Skeleton className="h-7 w-40" />
         <Skeleton className="h-96" />
       </div>
@@ -46,7 +47,7 @@ export default function AdminSettings() {
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-4">
+    <div className="mx-auto max-w-2xl space-y-4">
       <header>
         <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-0.5 text-xs text-muted">
@@ -116,6 +117,8 @@ export default function AdminSettings() {
         <Button onClick={() => setPolicyOpen(true)}>What&apos;s collected</Button>
         <TelemetryPolicyDialog open={policyOpen} onOpenChange={setPolicyOpen} />
       </section>
+
+      <CoachPromptEditor />
     </div>
   );
 }

@@ -153,6 +153,7 @@ Set `FOUNDRY_API_KEY` + `FOUNDRY_BASE_URL` (a Claude deployment on **Microsoft F
 - **What leaves the server**: that person's metrics for the selected range (sessions, lines, commits, acceptance, cost, cache ratio, scores, org medians, targets, badge progress, telemetry counters) — numbers only. No name, email, prompts, code or file names; the dashboard never has prompt content anyway. The "What's collected" page states this when the feature is on.
 - **Cost & caching**: generated on demand the first time a profile is opened, cached per person and range (`AI_RECOMMENDATIONS_TTL_HOURS`, default 24) and regenerated only when the numbers move; Regenerate is limited to once per 10 minutes per person and 120 generations/hour overall. Roughly $0.07–0.10 per generation on `claude-opus-5`.
 - **Grounding**: the model's JSON is schema-validated and every evidence key it cites is checked against the input; anything it made up is dropped before display. The Foundry deployment name is `FOUNDRY_MODEL` (default `claude-opus-5`).
+- **Editable prompt**: Admin → Settings → *AI coach prompt* lets an admin rewrite the coaching guidance (tone, priorities, house practices); the output format stays locked. Saving requires `ADMIN_PASSWORD` from the server's `.env` and clears the cached notes.
 
 ## Screenshots
 

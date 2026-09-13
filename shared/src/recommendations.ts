@@ -150,6 +150,21 @@ export interface RecommendationsResponse extends RecommendationsPayload {
   input: RecommendationInput;
 }
 
+/** GET/PUT /api/coach/prompt — the editable guidance half of the system prompt. */
+export interface CoachPromptResponse {
+  defaultGuidance: string;
+  /** null = the built-in default is in force */
+  customGuidance: string | null;
+  effectiveGuidance: string;
+  /** locked tail always appended to the guidance — the output JSON the parser expects */
+  outputContract: string;
+  updatedAt: string | null;
+  /** a Foundry key is configured (the prompt is used) */
+  enabled: boolean;
+  /** ADMIN_PASSWORD is set on the server, so saving is possible */
+  adminConfigured: boolean;
+}
+
 export const MAX_RECOMMENDATIONS = 5;
 export const MIN_RECOMMENDATIONS = 3;
 export const MAX_STRENGTHS = 2;

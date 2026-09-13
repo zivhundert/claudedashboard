@@ -1,8 +1,13 @@
 /**
- * The coach's system prompt. A pure function of shared constants (metric
- * guide, guards, segment thresholds, badge catalog) — no dates, no targets
- * (those are admin-overridable and travel in the user message) — so the text
- * is byte-stable across requests and the provider's prompt cache hits.
+ * The coach's system prompt in two parts:
+ *
+ *   - GUIDANCE: persona, rules, how scores work, glossary, badges. Admins can
+ *     replace this text from Settings → AI coach prompt (stored in sync_state;
+ *     see services/coachPrompt.ts). The default is a pure function of shared
+ *     constants — no dates, no targets (those travel in the user message) — so
+ *     it is byte-stable and the provider's prompt cache hits.
+ *   - OUTPUT_CONTRACT: the JSON shape the parser and sanitizer depend on.
+ *     Always appended, never editable, so a prompt edit can't break the card.
  */
 import { BADGE_CATALOG, GUARDS, METRIC_GUIDE, SEGMENT_THRESHOLDS } from '@dash/shared';
 
@@ -36,7 +41,7 @@ function axisNote(key: string): string {
   return g ? `  ${g.explanation}` : '';
 }
 
-export function buildSystemPrompt(): string {
+function buildDefaultGuidance(): string {
   const glossary = GLOSSARY_KEYS.map(guideLine).filter(Boolean).join('\n');
   const badges = Object.values(BADGE_CATALOG)
     .map((b) => `- ${b.id} (${b.name}): ${b.rule}`)
@@ -56,7 +61,7 @@ A single JSON object with this engineer's metrics for a date range, the organisa
 5. Every recommendation must move exactly one score axis, named in expectedEffect.axis, with a one-clause note of the mechanism.
 6. "evidence" lists the dotted JSON keys you relied on (e.g. "trust.acceptanceRatePct", "orgMedianScores.trust"). Only keys that exist in the input.
 7. "tryThis" must be a Claude-Code-specific action the person can take this week (examples: plan mode before large edits, CLAUDE.md conventions, /compact and shorter sessions, asking for smaller diffs, committing and opening PRs from Claude Code, reusing context instead of restarting sessions, skills/subagents/MCP where the telemetry shows they are unused). Prefer the lever with the largest gap to its target or to the org median.
-8. Return ONLY the JSON object described below — no markdown, no prose before or after.
+8. Return ONLY the JSON object described at the end — no markdown, no prose before or after.
 
 ## How scores work
 S(x, target) = sqrt(min(x / target, 1)) × 100 — half the target ≈ 71 points, at target = 100, beyond adds nothing. Volume targets are per-workday rates multiplied by the workdays in the range (already done in "targets"; compare raw counts to them directly).
@@ -76,9 +81,11 @@ ${glossary}
 
 ## Badges (id (name): rule)
 ${badges}
-"badges.closest" tells you which unearned badge is nearest; a recommendation may point at it when it aligns with a score axis.
+"badges.closest" tells you which unearned badge is nearest; a recommendation may point at it when it aligns with a score axis.`;
+}
 
-## Output JSON (exactly this shape)
+/** Locked: the parser (recommendationSchema.ts) and sanitizer depend on exactly this shape. */
+export const OUTPUT_CONTRACT = `## Output JSON (exactly this shape — return ONLY this object)
 {
   "standing": string,                 // 1–2 sentences: where this person stands vs org medians and targets
   "dataThin": boolean,
@@ -89,7 +96,13 @@ ${badges}
       "evidence": string[] }
   ]
 }`;
+
+/** Built once per process — the editable half of the byte-stable cached prefix. */
+export const DEFAULT_COACH_GUIDANCE = buildDefaultGuidance();
+
+/** guidance (default or admin-edited) + the locked output contract. */
+export function buildSystemPrompt(guidance: string = DEFAULT_COACH_GUIDANCE): string {
+  return `${guidance.trim()}\n\n${OUTPUT_CONTRACT}`;
 }
 
-/** Built once per process — the byte-stable cached prefix. */
 export const SYSTEM_PROMPT = buildSystemPrompt();

@@ -126,6 +126,12 @@ const schema = z.object({
   FOUNDRY_MODEL: z.preprocess(emptyToUndef, z.string().default('claude-opus-5')),
   /** How long a person's coaching notes are reused before the numbers are re-checked. */
   AI_RECOMMENDATIONS_TTL_HOURS: z.preprocess(emptyToUndef, z.coerce.number().min(1).max(720).default(24)),
+  /**
+   * Password for privileged edits in the Settings page (today: the AI coach
+   * prompt). Sent as the x-admin-password header; compared in constant time.
+   * Unset = those edits are refused (403). The dashboard has no other auth.
+   */
+  ADMIN_PASSWORD: z.preprocess(emptyToUndef, z.string().min(4).optional()),
 });
 
 /** Resolved AI-coach configuration; null = feature off. */
@@ -171,6 +177,8 @@ export interface Env {
   orgTimezone: string;
   /** AI coach (Claude on Microsoft Foundry); null when no key is configured. */
   ai: AiConfig | null;
+  /** Gate for privileged Settings edits (coach prompt); null = such edits refused. */
+  adminPassword: string | null;
 }
 
 function resolveAi(p: z.infer<typeof schema>): AiConfig | null {
@@ -266,5 +274,6 @@ export function loadEnv(): Env {
     otelPort: p.OTEL_PORT !== undefined && p.OTEL_PORT !== p.PORT ? p.OTEL_PORT : null,
     orgTimezone: p.ORG_TIMEZONE,
     ai: resolveAi(p),
+    adminPassword: p.ADMIN_PASSWORD ?? null,
   };
 }

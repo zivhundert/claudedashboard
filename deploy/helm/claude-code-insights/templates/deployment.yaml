@@ -148,6 +148,12 @@ spec:
                   name: {{ include "claude-code-insights.secretName" . }}
                   key: foundry-api-key
                   optional: true
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-code-insights.secretName" . }}
+                  key: admin-password
+                  optional: true
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}

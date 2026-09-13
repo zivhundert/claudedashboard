@@ -82,7 +82,7 @@ extraEnv: []
 # Two ways to provide secret env values:
 #  1. existingSecret: name of a Secret you manage yourself (kubectl / ESO /
 #     CSI driver). Expected keys: otel-ingest-token, admin-api-key,
-#     enterprise-analytics-key, foundry-api-key. All keys are OPTIONAL — missing keys are
+#     enterprise-analytics-key, foundry-api-key, admin-password. All keys are OPTIONAL — missing keys are
 #     simply not injected (secretKeyRef optional: true), so a secret holding
 #     only otel-ingest-token is fine.
 #  2. Inline values below: the chart creates the Secret itself. Only used
@@ -99,6 +99,8 @@ secrets:
   enterpriseAnalyticsKey: ""
   # Microsoft Foundry API key — turns on the AI coach (any data source).
   foundryApiKey: ""
+  # Password for privileged Settings edits (the AI coach prompt). Unset = read-only.
+  adminPassword: ""
 
 # ----------------------------------------------------------------------------
 # Persistence — the SQLite database (mounted at /app/data)

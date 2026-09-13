@@ -181,6 +181,23 @@ export function useRecommendations(idOrEmail: string, q: Pick<RangeQ, 'from' | '
   });
 }
 
+export function useCoachPrompt() {
+  return useQuery({ queryKey: ['coach-prompt'], queryFn: () => api.coachPrompt() });
+}
+
+export function useSaveCoachPrompt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ guidance, password }: { guidance: string | null; password: string }) =>
+      api.saveCoachPrompt(guidance, password),
+    onSuccess: (data) => {
+      qc.setQueryData(['coach-prompt'], data);
+      // every cached note was cleared server-side — drop the client copies too
+      void qc.invalidateQueries({ queryKey: ['recommendations'] });
+    },
+  });
+}
+
 export function useRegenerateRecommendations() {
   const qc = useQueryClient();
   return useMutation({

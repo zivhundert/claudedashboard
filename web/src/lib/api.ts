@@ -6,6 +6,7 @@ import type {
   BreakdownDimension,
   BreakdownResponse,
   CapabilitiesResponse,
+  CoachPromptResponse,
   CostsResponse,
   DimensionsResponse,
   EcosystemResponse,
@@ -197,6 +198,16 @@ export const api = {
       `/api/users/${encodeURIComponent(idOrEmail)}/recommendations/regenerate${qs({ from: q.from, to: q.to })}`,
       { method: 'POST' },
     ),
+
+  coachPrompt: () => request<CoachPromptResponse>('/api/coach/prompt'),
+
+  /** Admin only: the password travels in a header, never in the body or URL. `null` resets to the default. */
+  saveCoachPrompt: (guidance: string | null, adminPassword: string) =>
+    request<CoachPromptResponse>('/api/coach/prompt', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+      body: JSON.stringify({ guidance }),
+    }),
 
   breakdown: (dimension: BreakdownDimension, entity: string, q: RangeQ) =>
     request<BreakdownResponse>(

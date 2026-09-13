@@ -59,6 +59,7 @@ kubectl -n claude-insights create secret generic insights-secrets \
   #   --from-literal=admin-api-key=sk-ant-admin... \
   #   --from-literal=enterprise-analytics-key=...
   #   --from-literal=foundry-api-key=...            # optional: turns on the AI coach
+  #   --from-literal=admin-password=...             # optional: lets admins edit the coach prompt
 
 helm install insights deploy/helm/claude-code-insights \
   --namespace claude-insights \

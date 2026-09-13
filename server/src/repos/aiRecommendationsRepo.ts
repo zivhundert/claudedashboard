@@ -45,6 +45,11 @@ export class AiRecommendationsRepo {
     return this.db.prepare(`DELETE FROM ai_recommendations WHERE user_id = ?`).run(userId).changes;
   }
 
+  /** Everything — after a prompt change, every cached note was written under the old prompt. */
+  clearAll(): number {
+    return this.db.prepare(`DELETE FROM ai_recommendations`).run().changes;
+  }
+
   /** Rows older than `days` — nobody looks at last month's coaching notes. */
   pruneOlderThan(days: number): number {
     const before = new Date(Date.now() - days * 86_400_000).toISOString();
