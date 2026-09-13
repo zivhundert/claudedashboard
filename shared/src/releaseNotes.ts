@@ -12,23 +12,14 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
-    version: '1.0.7',
-    date: '2026-09-13',
-    highlights: [
-      'AI coach can run on any Anthropic-compatible endpoint, not only Claude on Microsoft Foundry — e.g. a GPT deployment behind a LiteLLM proxy. Point FOUNDRY_BASE_URL at the proxy root; set FOUNDRY_MODEL to its alias and AI_PROVIDER_LABEL to what answers.',
-      'The Coach card, “What’s collected” and the boot banner now name the actual provider and model — the disclosure never says Claude unless it is Claude.',
-      'Misconfigured coach endpoints fail loudly: one tiny check at boot, the reason in the banner and in /api/capabilities, and the card shows “AI coach misconfigured: …” instead of a misleading “user not found”.',
-      'Coach errors carry precise codes (model_not_deployed, auth_failed, unreachable, no_metrics_for_range, …) so a missing deployment is never reported as a missing user.',
-    ],
-  },
-  {
     version: '1.0.6',
     date: '2026-09-13',
     highlights: [
       'Personal page → Coach: 3–5 AI-written recommendations grounded in your own numbers vs org medians and score targets, each citing the metrics it used, a Claude Code practice to try, and the score it lifts — plus a “where you stand” line and your strengths.',
-      'Coach notes are cached per person for a day; Regenerate asks Claude again (rate-limited). Needs a Claude deployment on Microsoft Foundry (FOUNDRY_API_KEY) — the card does not exist otherwise.',
-      '“What’s collected” now states when the AI coach is on, which model, and that only numbers are sent — never prompts, code or file names.',
+      'Works with any Anthropic-compatible endpoint: a Claude deployment on Microsoft Foundry, or another model behind a proxy such as LiteLLM (e.g. GPT-5.6). Set FOUNDRY_BASE_URL, FOUNDRY_API_KEY, FOUNDRY_MODEL and AI_PROVIDER_LABEL; the card does not exist without a key.',
+      'Coach notes are cached per person for a day; Regenerate asks the model again (rate-limited). The card footer, “What’s collected” and the boot banner name the actual provider and model, and state that only numbers are sent — never prompts, code or file names.',
       'Admin → Settings → AI coach prompt: rewrite the coaching guidance (tone, priorities, house practices) behind an admin password; the output format stays locked and cached notes are cleared on save.',
+      'Misconfigured coach endpoints fail loudly: one tiny check at boot, the reason in the banner and in /api/capabilities, and the card shows “AI coach misconfigured: …” with precise error codes (model_not_deployed, auth_failed, unreachable, no_metrics_for_range, …) instead of a misleading “user not found”.',
     ],
   },
   {

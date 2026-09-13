@@ -43,7 +43,7 @@ const PAYLOAD = {
       id: 'ask-for-smaller-diffs',
       title: 'Ask for smaller diffs',
       why: 'Acceptance rate is 41%; 60% already scores 100 on Trust. Most rejected edits are Write operations.',
-      tryThis: 'Before a large change, ask Claude to propose the plan and touch one file at a time; approve incrementally instead of rejecting a big Write.',
+      tryThis: 'Before a large change, enter plan mode (Shift+Tab) so Claude Code proposes the plan, then touch one file at a time; approve incrementally instead of rejecting a big Write.',
       expectedEffect: { axis: 'trust', note: 'fewer rejected edits lifts the acceptance rate directly' },
       evidence: ['trust.acceptanceRatePct', 'trust.perTool', 'targets.toolEvents'],
     },

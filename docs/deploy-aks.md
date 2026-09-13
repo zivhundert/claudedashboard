@@ -24,7 +24,7 @@ Either build in Azure (no local docker needed, always the right arch):
 
 ```bash
 az acr build --registry <acrName> \
-  --image claude-code-insights:1.0.7 \
+  --image claude-code-insights:1.0.6 \
   --platform linux/amd64 .
 ```
 
@@ -34,7 +34,7 @@ mandatory — AKS node pools are amd64):
 ```bash
 az acr login --name <acrName>
 docker buildx build --platform linux/amd64 \
-  -t <acrName>.azurecr.io/claude-code-insights:1.0.7 --push .
+  -t <acrName>.azurecr.io/claude-code-insights:1.0.6 --push .
 ```
 
 ### 2. Let AKS pull from the ACR
@@ -64,7 +64,7 @@ kubectl -n claude-insights create secret generic insights-secrets \
 helm install insights deploy/helm/claude-code-insights \
   --namespace claude-insights \
   --set image.repository=<acrName>.azurecr.io/claude-code-insights \
-  --set image.tag=1.0.7 \
+  --set image.tag=1.0.6 \
   --set secrets.existingSecret=insights-secrets \
   --set service.type=LoadBalancer \
   --set service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=true
