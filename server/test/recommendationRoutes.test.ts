@@ -14,14 +14,14 @@ const USER = { id: 7, actor_type: 'user', email: 'dev@example.com', name: 'Dev' 
 const RANGE = { from: '2026-09-01', to: '2026-09-13' };
 const URL = `/api/users/7/recommendations?from=${RANGE.from}&to=${RANGE.to}`;
 
-function buildApp(opts: { userExists?: boolean; getOrGenerate: () => Promise<unknown> }): FastifyInstance {
+function buildApp(opts: { userExists?: boolean; coachEnabled?: boolean; getOrGenerate: () => Promise<unknown> }): FastifyInstance {
   const users = {
     getById: (id: number) => (opts.userExists !== false && id === USER.id ? USER : undefined),
     getByEmail: (email: string) => (opts.userExists !== false && email === USER.email ? USER : undefined),
   };
   const ctx = {
     env: { adminPassword: null },
-    repos: { users },
+    repos: { users, settings: { getMerged: () => ({ aiCoachEnabled: opts.coachEnabled ?? true }) } },
     ai: { getOrGenerate: opts.getOrGenerate },
   } as unknown as AppContext;
   const app = Fastify();
@@ -110,16 +110,49 @@ describe('GET /api/users/:idOrEmail/recommendations — error mapping', () => {
   });
 
   it('success passes the service payload through', async () => {
-    app = buildApp({ getOrGenerate: () => Promise.resolve({ standing: 'ok', cached: true }) });
+    app = buildApp({ getOrGenerate: () => Promise.resolve({ summary: 'ok', cached: true }) });
     const res = await app.inject({ method: 'GET', url: URL });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ standing: 'ok', cached: true });
+    expect(res.json()).toEqual({ summary: 'ok', cached: true });
+  });
+
+  it('ranges shorter than 7 days → 400 range_too_short, no model call', async () => {
+    let called = 0;
+    app = buildApp({
+      getOrGenerate: () => {
+        called += 1;
+        return Promise.resolve({});
+      },
+    });
+    const short = await app.inject({ method: 'GET', url: '/api/users/7/recommendations?from=2026-09-08&to=2026-09-13' }); // 6 days
+    expect(short.statusCode).toBe(400);
+    expect((short.json() as { error: string }).error).toBe('range_too_short');
+    const ok = await app.inject({ method: 'GET', url: '/api/users/7/recommendations?from=2026-09-07&to=2026-09-13' }); // 7 days
+    expect(ok.statusCode).toBe(200);
+    expect(called).toBe(1);
+  });
+
+  it('ai_disabled when the Settings switch is off, even with a key configured', async () => {
+    let called = 0;
+    app = buildApp({
+      coachEnabled: false,
+      getOrGenerate: () => {
+        called += 1;
+        return Promise.resolve({});
+      },
+    });
+    const res = await app.inject({ method: 'GET', url: URL });
+    expect(res.statusCode).toBe(404);
+    const body = res.json() as { error: string; message: string };
+    expect(body.error).toBe('ai_disabled');
+    expect(body.message).toMatch(/Settings/);
+    expect(called).toBe(0);
   });
 
   it('ai_disabled when no service is configured', async () => {
     app = buildApp({ getOrGenerate: () => Promise.resolve({}) });
     await app.close();
-    const ctx = { env: { adminPassword: null }, repos: { users: {} }, ai: null } as unknown as AppContext;
+    const ctx = { env: { adminPassword: null }, repos: { users: {}, settings: { getMerged: () => ({ aiCoachEnabled: true }) } }, ai: null } as unknown as AppContext;
     app = Fastify();
     registerRecommendationRoutes(app, ctx);
     const res = await app.inject({ method: 'GET', url: URL });

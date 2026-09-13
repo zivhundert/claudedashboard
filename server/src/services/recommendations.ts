@@ -23,6 +23,7 @@ import {
   type RecommendationsResponse,
 } from '@dash/shared';
 import type { FastifyBaseLogger } from 'fastify';
+import { ZodError } from 'zod';
 import type { AiConfig } from '../env';
 import type { Repos } from '../repos';
 import { FoundryCoach, AiUpstreamError, type GenerationUsage } from '../ai/foundryClient';
@@ -108,7 +109,8 @@ export class RecommendationService {
   /** Runtime status for /api/capabilities and the boot banner. */
   status(): AiCoachStatus {
     return {
-      enabled: true,
+      enabled: true, // the route overlays the Settings switch
+      configured: true,
       model: this.cfg.model,
       providerLabel: this.cfg.providerLabel,
       ...this.health,
@@ -194,6 +196,7 @@ export class RecommendationService {
         throw new AiUpstreamError('bad_answer', `only ${payload.recommendations.length} usable recommendations came back`);
       }
       this.noteGenerated(key, force);
+      const ms = Date.now() - started;
       this.log.info(
         {
           userId,
@@ -201,23 +204,33 @@ export class RecommendationService {
           structured: gen.structured,
           attempts: gen.attempts,
           usage: gen.usage,
-          ms: Date.now() - started,
+          ms,
           recommendations: payload.recommendations.length,
         },
         'ai coach: generated',
       );
+      // the cost ledger (Settings → AI coach → usage); never pruned, unlike the cache
+      this.repos.aiRecs.logGeneration({
+        user_id: userId,
+        generated_at: nowIso(),
+        model: gen.model,
+        input_tokens: gen.usage.inputTokens,
+        output_tokens: gen.usage.outputTokens,
+        cache_read_tokens: gen.usage.cacheReadTokens,
+        cache_write_tokens: gen.usage.cacheWriteTokens,
+        structured: gen.structured ? 1 : 0,
+        attempts: gen.attempts,
+        duration_ms: ms,
+      });
       return this.store(userId, rangeKey, input, hash, payload, gen.usage, gen.model);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    } catch (raw) {
+      // zod/sanitizer rejections land here too: the endpoint answered, the
+      // answer was unusable — a bad_answer, which says nothing about reachability
+      const err = raw instanceof AiUpstreamError ? raw : new AiUpstreamError('bad_answer', describeBadAnswer(raw));
       this.markFailed(err);
-      this.log.warn(
-        { userId, rangeKey, code: err instanceof AiUpstreamError ? err.code : 'unknown', err: message, ms: Date.now() - started },
-        'ai coach: generation failed',
-      );
-      if (row) return this.fromRow(row, true, `Could not refresh: ${message}`);
-      if (err instanceof AiUpstreamError) throw err;
-      // zod/sanitizer rejections land here: the endpoint answered, the answer was unusable
-      throw new AiUpstreamError('bad_answer', message);
+      this.log.warn({ userId, rangeKey, code: err.code, err: err.message, ms: Date.now() - started }, 'ai coach: generation failed');
+      if (row) return this.fromRow(row, true, `Could not refresh: ${err.message}`);
+      throw err;
     }
   }
 
@@ -296,19 +309,28 @@ export class RecommendationService {
   }
 }
 
+/** Short, operator-readable reason for a rejected answer (zod dumps are pages long). */
+function describeBadAnswer(err: unknown): string {
+  if (err instanceof ZodError) {
+    const paths = [...new Set(err.issues.map((i) => i.path.join('.') || '(root)'))].slice(0, 4);
+    return `the model's answer did not match the output contract (${paths.join(', ')})`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 function cannedNoActivity(input: RecommendationInput): RecommendationsPayload {
   return {
-    standing: `No Claude Code sessions were recorded for you between ${input.range.from} and ${input.range.to}, so there is nothing to coach on in this range yet.`,
+    summary: `No Claude Code sessions were recorded for you between ${input.range.from} and ${input.range.to}, so there is nothing to coach on in this range yet.`,
     dataThin: true,
     strengths: [],
     recommendations: [
       {
         id: 'start-with-one-task-a-day',
         title: 'Start with one task a day',
-        why: `Sessions in this range: ${input.activity.sessions}. The scores only begin to mean something after ${3} active days.`,
-        tryThis: 'Pick one small, well-defined task each day this week — a test, a refactor, a bug — and run it end to end in Claude Code.',
-        expectedEffect: { axis: 'adoption', note: 'active days and sessions are 80% of the Adoption score' },
-        evidence: ['activity.sessions', 'activity.activeDays', 'targets.sessions'],
+        why: `Sessions in this range: ${input.activity.sessions}, active days: ${input.activity.activeDays}. A few days of real use are needed before there is anything to reflect on.`,
+        tryThis: 'Pick one small, well-defined task each day this week — a test, a refactor, a bug — and run it end to end in Claude Code, including the commit.',
+        expectedEffect: { area: 'adoption', note: 'a daily habit is what every other improvement builds on' },
+        evidence: ['activity.sessions', 'activity.activeDays'],
       },
     ],
   };

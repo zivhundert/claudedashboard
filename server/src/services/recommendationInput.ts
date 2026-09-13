@@ -2,14 +2,17 @@
  * Gathers everything the coach may reason about for one person and shapes it
  * into the compact, anonymous RecommendationInput (shared contract), plus a
  * SHA-256 of its canonical serialisation so the cache can tell "same numbers"
- * from "numbers moved". Reuses the leaderboard assembler for scores/targets/
- * medians and the telemetry-pack repos for the optional counters.
+ * from "numbers moved". Reuses the leaderboard assembler for the per-person
+ * metrics (only that person's entry is used — no medians, no targets) and the
+ * telemetry repos for the optional counters and the named skills / subagents /
+ * MCP servers.
  */
 import { createHash } from 'node:crypto';
 import {
   buildRecommendationInput,
   stableStringify,
   type ModelUsage,
+  type NamedCount,
   type RecommendationInput,
   type RecommendationTelemetry,
 } from '@dash/shared';
@@ -50,14 +53,14 @@ export function buildRecommendationInputForUser(
   const input = buildRecommendationInput({
     range,
     entry,
-    orgMedianScores: data.orgMedianScores,
-    targets: data.targets,
     coverage: data.coverage,
     models,
     telemetry: telemetryFor(repos, userId, range),
   });
   return { input, hash: hashInput(input) };
 }
+
+const failurePct = (failures: number, total: number): number | null => (total > 0 ? (failures / total) * 100 : null);
 
 function telemetryFor(repos: Repos, userId: number, range: RangeParams): RecommendationTelemetry | null {
   const scope = { userId };
@@ -81,6 +84,20 @@ function telemetryFor(repos: Repos, userId: number, range: RangeParams): Recomme
   const errRate = errorRate(rel.api_requests, rel.api_errors);
   const avgSession = mean(durations);
 
+  // Named lists: tool/skill/server names are configuration, not personal data
+  // (the privacy filter already decided what names reach the tables).
+  const topSkills: NamedCount[] = repos.otel
+    .skillTotals(from, to, scope)
+    .map((s) => ({ name: s.skill_name, count: s.invocations, failurePct: null }));
+  const subagents: NamedCount[] = repos.otel
+    .agentTotals(from, to, scope)
+    .map((a) => ({ name: a.subagent_type, count: a.invocations, failurePct: failurePct(a.failure, a.success + a.failure) }));
+  const mcpServers: NamedCount[] = mcp.map((s) => ({
+    name: s.server_name,
+    count: s.tool_calls,
+    failurePct: failurePct(s.tool_failures, s.tool_calls),
+  }));
+
   return {
     activeHours: act.active_user_s > 0 ? act.active_user_s / 3600 : null,
     prompts: act.prompts > 0 ? act.prompts : null,
@@ -98,5 +115,8 @@ function telemetryFor(repos: Repos, userId: number, range: RangeParams): Recomme
     mcpCalls: mcp.reduce((s, r) => s + r.tool_calls, 0),
     mcpFailures: mcp.reduce((s, r) => s + r.tool_failures, 0),
     activeMcpServers: mcp.filter((r) => r.tool_calls >= 10).length,
+    topSkills,
+    subagents,
+    mcpServers,
   };
 }

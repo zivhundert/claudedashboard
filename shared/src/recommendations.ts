@@ -4,18 +4,39 @@
  * serialisation, the thin-data rule, output sanitising). Server, web and the
  * unit tests share this file so the prompt, the validator and the UI never
  * drift apart. Nothing here knows about the LLM provider.
+ *
+ * Framing: the coach looks at ONE developer on their own terms — how they use
+ * Claude Code and how to get more out of it. The input therefore carries no
+ * scores, org medians, targets, ranks or badges: nothing to compare against.
  */
-import type { BadgeId, DateRange, LeaderboardEntry, ModelUsage, SegmentTier, ToolName } from './types.js';
+import type { DateRange, LeaderboardEntry, ModelUsage, ToolName } from './types.js';
 import { GUARDS } from './scoring/scores.js';
-import { COVERAGE_MIN, type ImpactCoverage, type ScoreTargets } from './scoring/targets.js';
+import { COVERAGE_MIN, type ImpactCoverage } from './scoring/targets.js';
 
-export type ScoreAxis = 'adoption' | 'impact' | 'efficiency' | 'trust';
-export const SCORE_AXES: readonly ScoreAxis[] = ['adoption', 'impact', 'efficiency', 'trust'];
+/**
+ * What a recommendation improves — areas of working with Claude Code, not
+ * dashboard score axes:
+ *   adoption   using Claude Code more regularly and for more of the work
+ *   efficiency context, cache, cost and session hygiene
+ *   quality    edits that get kept: planning, conventions, smaller asks
+ *   toolkit    skills, subagents, MCP servers, permission modes
+ *   delivery   finishing tasks end to end inside Claude Code (tests, commits, PRs)
+ */
+export type RecommendationArea = 'adoption' | 'efficiency' | 'quality' | 'toolkit' | 'delivery';
+export const RECOMMENDATION_AREAS: readonly RecommendationArea[] = ['adoption', 'efficiency', 'quality', 'toolkit', 'delivery'];
 
 /** Bump when RecommendationInput changes shape — cached rows stop matching and regenerate. */
-export const RECOMMENDATION_INPUT_VERSION = 1;
+export const RECOMMENDATION_INPUT_VERSION = 2;
 
-export type ImpactTerm = 'linesAdded' | 'commits' | 'pullRequests';
+/** The coach needs at least this many calendar days of data; shorter ranges are refused before any model call. */
+export const COACH_MIN_RANGE_DAYS = 7;
+
+export interface NamedCount {
+  name: string;
+  count: number;
+  /** failures ÷ count, whole percent; null when there is nothing to divide */
+  failurePct: number | null;
+}
 
 /** Telemetry-pack counters for one person; null fields = that pack has no rows for them. */
 export interface RecommendationTelemetry {
@@ -35,6 +56,12 @@ export interface RecommendationTelemetry {
   mcpCalls: number;
   mcpFailures: number;
   activeMcpServers: number;
+  /** most-used skills (slash commands / packaged workflows), top 5 */
+  topSkills: NamedCount[];
+  /** subagent types run, top 5, with failure rate */
+  subagents: NamedCount[];
+  /** MCP servers called, top 5, with failure rate */
+  mcpServers: NamedCount[];
 }
 
 /**
@@ -62,12 +89,14 @@ export interface RecommendationInput {
     linesPerSession: number;
     linesPerDollar: number;
   };
-  trust: {
-    toolAccepted: number;
-    toolRejected: number;
+  /** edit decisions: what the person kept vs rejected, per tool */
+  edits: {
+    accepted: number;
+    rejected: number;
     acceptanceRatePct: number | null;
     perTool: Record<ToolName, { accepted: number; rejected: number }>;
-    lowConfidence: boolean;
+    /** fewer than GUARDS.minToolEvents decisions — rates are noisy */
+    fewDecisions: boolean;
   };
   cost: {
     costUsd: number;
@@ -78,31 +107,12 @@ export interface RecommendationInput {
     significantModels: number;
     topModels: Array<{ model: string; sharePct: number }>;
   };
-  scores: {
-    adoption: number;
-    impact: number;
-    efficiency: number;
-    trust: number;
-    composite: number | null;
-    segment: SegmentTier;
-    efficiencyLowConfidence: boolean;
-    trustLowConfidence: boolean;
-  };
-  orgMedianScores: { adoption: number; impact: number; efficiency: number; trust: number };
-  /** volume targets already multiplied by the range's workdays — compare raw counts directly */
-  targets: {
-    sessions: number;
-    toolEvents: number;
-    linesAdded: number;
-    commits: number;
-    pullRequests: number;
-    linesPerSession: number;
-    linesPerDollar: number;
-    impactTermsCounted: ImpactTerm[];
-  };
-  badges: {
-    earned: BadgeId[];
-    closest: Array<{ id: BadgeId; progressPct: number; detail: string }>;
+  /** what this installation can even see — so the coach never asks for the invisible */
+  context: {
+    /** commits are attributed in this org (git tooling reports them) */
+    commitsTracked: boolean;
+    /** pull requests are attributed in this org (GitHub tooling) */
+    pullRequestsTracked: boolean;
   };
   telemetry: RecommendationTelemetry | null;
 }
@@ -115,8 +125,8 @@ export interface Recommendation {
   why: string;
   /** a Claude-Code-specific action for this week */
   tryThis: string;
-  expectedEffect: { axis: ScoreAxis; note: string };
-  /** dotted keys into RecommendationInput, e.g. "trust.acceptanceRatePct" */
+  expectedEffect: { area: RecommendationArea; note: string };
+  /** dotted keys into RecommendationInput, e.g. "edits.acceptanceRatePct" */
   evidence: string[];
 }
 
@@ -128,7 +138,8 @@ export interface RecommendationStrength {
 
 /** What the model returns (validated server-side, then sanitised). */
 export interface RecommendationsPayload {
-  standing: string;
+  /** 1–2 sentences: how this person uses Claude Code in this range, in their own terms */
+  summary: string;
   dataThin: boolean;
   strengths: RecommendationStrength[];
   recommendations: Recommendation[];
@@ -159,10 +170,44 @@ export interface CoachPromptResponse {
   /** locked tail always appended to the guidance — the output JSON the parser expects */
   outputContract: string;
   updatedAt: string | null;
-  /** an AI coach key is configured (the prompt is used) */
+  /** a key is configured AND the Settings toggle is on (the prompt is used) */
   enabled: boolean;
   /** ADMIN_PASSWORD is set on the server, so saving is possible */
   adminConfigured: boolean;
+}
+
+/** Token usage of one generation, as reported by the endpoint. */
+export interface CoachUsageTotals {
+  generations: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** priced with the AppSettings.aiCoachPrice* rates in force */
+  estimatedUsd: number;
+}
+
+export type CoachUsageWindowKey = 'today' | '7d' | '30d' | 'all';
+
+/** GET /api/coach/usage — what the coach has cost so far. */
+export interface CoachUsageResponse {
+  windows: Array<{ key: CoachUsageWindowKey; label: string; since: string | null } & CoachUsageTotals>;
+  /** $ per million tokens used for estimatedUsd (from Settings) */
+  pricing: { inputUsdPerMTok: number; outputUsdPerMTok: number; cacheReadUsdPerMTok: number };
+  lastGeneratedAt: string | null;
+}
+
+/** Cost of one generation at the given $/MTok rates. Cache writes are billed at the input rate. */
+export function priceGeneration(
+  usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number },
+  pricing: CoachUsageResponse['pricing'],
+): number {
+  const perTok = (usd: number) => usd / 1_000_000;
+  return (
+    (usage.inputTokens + usage.cacheWriteTokens) * perTok(pricing.inputUsdPerMTok) +
+    usage.outputTokens * perTok(pricing.outputUsdPerMTok) +
+    usage.cacheReadTokens * perTok(pricing.cacheReadUsdPerMTok)
+  );
 }
 
 export const MAX_RECOMMENDATIONS = 5;
@@ -181,8 +226,6 @@ const kTokens = (n: number): number => Math.round(n / 1000) * 1000;
 export interface BuildRecommendationInputArgs {
   range: DateRange;
   entry: LeaderboardEntry;
-  orgMedianScores: RecommendationInput['orgMedianScores'];
-  targets: ScoreTargets;
   coverage: ImpactCoverage;
   models: ModelUsage[];
   telemetry: RecommendationTelemetry | null;
@@ -194,8 +237,13 @@ export function daysInclusive(range: DateRange): number {
   return Number.isFinite(ms) ? Math.max(1, Math.round(ms / 86_400_000) + 1) : 1;
 }
 
+/** true when the range is long enough for the coach to say anything useful. */
+export function isCoachableRange(range: DateRange): boolean {
+  return daysInclusive(range) >= COACH_MIN_RANGE_DAYS;
+}
+
 export function buildRecommendationInput(args: BuildRecommendationInputArgs): RecommendationInput {
-  const { range, entry, orgMedianScores, targets, coverage, models, telemetry } = args;
+  const { range, entry, coverage, models, telemetry } = args;
   const m = entry.metrics;
   const wd = Math.max(1, m.workdays);
   const days = daysInclusive(range);
@@ -205,15 +253,8 @@ export function buildRecommendationInput(args: BuildRecommendationInputArgs): Re
     .sort((a, b) => b.share - a.share)
     .slice(0, 3)
     .map((x) => ({ model: x.model, sharePct: pct(x.share) }));
-  const impactTermsCounted: ImpactTerm[] = ['linesAdded'];
-  if (coverage.commits >= COVERAGE_MIN) impactTermsCounted.push('commits');
-  if (coverage.pullRequests >= COVERAGE_MIN) impactTermsCounted.push('pullRequests');
   const costDollars = m.costCents / 100;
-  const closest = entry.badges
-    .filter((b) => !b.earned)
-    .sort((a, b) => b.progress - a.progress)
-    .slice(0, 3)
-    .map((b) => ({ id: b.id, progressPct: pct(b.progress), detail: b.detail }));
+  const decisions = m.toolAccepted + m.toolRejected;
 
   return {
     version: RECOMMENDATION_INPUT_VERSION,
@@ -235,12 +276,12 @@ export function buildRecommendationInput(args: BuildRecommendationInputArgs): Re
       linesPerSession: m.sessions > 0 ? r1(m.linesAdded / m.sessions) : 0,
       linesPerDollar: costDollars > 0 ? r1(m.linesAdded / costDollars) : 0,
     },
-    trust: {
-      toolAccepted: m.toolAccepted,
-      toolRejected: m.toolRejected,
+    edits: {
+      accepted: m.toolAccepted,
+      rejected: m.toolRejected,
       acceptanceRatePct: m.acceptanceRate === null ? null : pct(m.acceptanceRate),
       perTool: m.perTool,
-      lowConfidence: entry.scores.trustLowConfidence,
+      fewDecisions: decisions < GUARDS.minToolEvents,
     },
     cost: {
       costUsd: usd(m.costCents),
@@ -251,39 +292,26 @@ export function buildRecommendationInput(args: BuildRecommendationInputArgs): Re
       significantModels: m.significantModels,
       topModels,
     },
-    scores: {
-      adoption: r1(entry.scores.adoption),
-      impact: r1(entry.scores.impact),
-      efficiency: r1(entry.scores.efficiency),
-      trust: r1(entry.scores.trust),
-      composite: entry.scores.composite === null ? null : r1(entry.scores.composite),
-      segment: entry.segment,
-      efficiencyLowConfidence: entry.scores.efficiencyLowConfidence,
-      trustLowConfidence: entry.scores.trustLowConfidence,
+    context: {
+      commitsTracked: coverage.commits >= COVERAGE_MIN,
+      pullRequestsTracked: coverage.pullRequests >= COVERAGE_MIN,
     },
-    orgMedianScores: {
-      adoption: r1(orgMedianScores.adoption),
-      impact: r1(orgMedianScores.impact),
-      efficiency: r1(orgMedianScores.efficiency),
-      trust: r1(orgMedianScores.trust),
-    },
-    targets: {
-      sessions: Math.round(targets.perWorkday.sessions * wd),
-      toolEvents: Math.round(targets.perWorkday.toolEvents * wd),
-      linesAdded: Math.round(targets.perWorkday.linesAdded * wd),
-      commits: Math.round(targets.perWorkday.commits * wd),
-      pullRequests: r1(targets.perWorkday.pullRequests * wd),
-      linesPerSession: targets.flat.linesPerSession,
-      linesPerDollar: targets.flat.linesPerDollar,
-      impactTermsCounted,
-    },
-    badges: { earned: entry.badges.filter((b) => b.earned).map((b) => b.id), closest },
     telemetry: telemetry === null ? null : roundTelemetry(telemetry),
   };
 }
 
 function tokenSum(x: ModelUsage): number {
   return x.tokens.input + x.tokens.output + x.tokens.cacheRead + x.tokens.cacheCreation;
+}
+
+const TOP_N = 5;
+
+function topNamed(list: NamedCount[]): NamedCount[] {
+  return [...list]
+    .filter((x) => x.count > 0)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, TOP_N)
+    .map((x) => ({ name: x.name, count: x.count, failurePct: x.failurePct === null ? null : Math.round(x.failurePct) }));
 }
 
 function roundTelemetry(t: RecommendationTelemetry): RecommendationTelemetry {
@@ -293,6 +321,9 @@ function roundTelemetry(t: RecommendationTelemetry): RecommendationTelemetry {
     avgSessionMin: t.avgSessionMin === null ? null : Math.round(t.avgSessionMin),
     apiErrorRatePct: t.apiErrorRatePct === null ? null : r1(t.apiErrorRatePct),
     autoApprovedSharePct: t.autoApprovedSharePct === null ? null : Math.round(t.autoApprovedSharePct),
+    topSkills: topNamed(t.topSkills),
+    subagents: topNamed(t.subagents),
+    mcpServers: topNamed(t.mcpServers),
   };
 }
 
@@ -367,7 +398,7 @@ export function sanitizeRecommendations(
   for (const r of payload.recommendations ?? []) {
     const evidence = keep(r.evidence);
     if (evidence.length === 0) continue;
-    if (!SCORE_AXES.includes(r.expectedEffect?.axis)) continue;
+    if (!RECOMMENDATION_AREAS.includes(r.expectedEffect?.area)) continue;
     let id = slugify(r.id || r.title);
     let n = 2;
     while (seen.has(id)) id = `${slugify(r.id || r.title)}-${n++}`;
@@ -383,7 +414,7 @@ export function sanitizeRecommendations(
     if (strengths.length >= MAX_STRENGTHS) break;
   }
   return {
-    standing: (payload.standing ?? '').trim(),
+    summary: (payload.summary ?? '').trim(),
     dataThin: Boolean(payload.dataThin) || isThinData(input),
     strengths,
     recommendations,
@@ -393,6 +424,14 @@ export function sanitizeRecommendations(
 // ---------------------------------------------------------------------------
 // Presentation helpers for evidence chips
 // ---------------------------------------------------------------------------
+
+export const RECOMMENDATION_AREA_LABELS: Record<RecommendationArea, string> = {
+  adoption: 'Adoption',
+  efficiency: 'Efficiency',
+  quality: 'Quality',
+  toolkit: 'Toolkit',
+  delivery: 'Delivery',
+};
 
 export const RECOMMENDATION_EVIDENCE_LABELS: Record<string, string> = {
   'activity.sessions': 'Sessions',
@@ -408,33 +447,20 @@ export const RECOMMENDATION_EVIDENCE_LABELS: Record<string, string> = {
   'output.pullRequests': 'Pull requests',
   'output.linesPerSession': 'Lines / session',
   'output.linesPerDollar': 'Lines / $',
-  'trust.toolAccepted': 'Edits accepted',
-  'trust.toolRejected': 'Edits rejected',
-  'trust.acceptanceRatePct': 'Acceptance rate',
-  'trust.lowConfidence': 'Low confidence',
+  'edits.accepted': 'Edits accepted',
+  'edits.rejected': 'Edits rejected',
+  'edits.acceptanceRatePct': 'Acceptance rate',
+  'edits.perTool': 'Per tool',
+  'edits.fewDecisions': 'Few decisions',
   'cost.costUsd': 'Cost',
   'cost.inputTokens': 'Input tokens',
   'cost.outputTokens': 'Output tokens',
   'cost.cacheReadTokens': 'Cache-read tokens',
   'cost.cacheRatioPct': 'Cache hit rate',
   'cost.significantModels': 'Models used',
-  'scores.adoption': 'Adoption score',
-  'scores.impact': 'Impact score',
-  'scores.efficiency': 'Efficiency score',
-  'scores.trust': 'Trust score',
-  'scores.composite': 'Composite',
-  'scores.segment': 'Segment',
-  'orgMedianScores.adoption': 'Org median adoption',
-  'orgMedianScores.impact': 'Org median impact',
-  'orgMedianScores.efficiency': 'Org median efficiency',
-  'orgMedianScores.trust': 'Org median trust',
-  'targets.sessions': 'Sessions target',
-  'targets.toolEvents': 'Tool-decisions target',
-  'targets.linesAdded': 'Lines target',
-  'targets.commits': 'Commits target',
-  'targets.pullRequests': 'PRs target',
-  'targets.linesPerSession': 'Lines / session target',
-  'targets.linesPerDollar': 'Lines / $ target',
+  'cost.topModels': 'Top models',
+  'context.commitsTracked': 'Commits tracked',
+  'context.pullRequestsTracked': 'PRs tracked',
   'telemetry.activeHours': 'Engaged hours',
   'telemetry.prompts': 'Prompts',
   'telemetry.avgSessionMin': 'Avg session (min)',
@@ -451,6 +477,9 @@ export const RECOMMENDATION_EVIDENCE_LABELS: Record<string, string> = {
   'telemetry.mcpCalls': 'MCP calls',
   'telemetry.mcpFailures': 'MCP failures',
   'telemetry.activeMcpServers': 'Active MCP servers',
+  'telemetry.topSkills': 'Top skills',
+  'telemetry.subagents': 'Subagents',
+  'telemetry.mcpServers': 'MCP servers',
 };
 
 export function evidenceLabel(key: string): string {
@@ -469,6 +498,13 @@ export function formatEvidenceValue(key: string, value: unknown): string {
     return value.toLocaleString('en-US');
   }
   if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`;
+  if (Array.isArray(value)) {
+    // named lists read better as names than as "3 items"
+    const names = value
+      .map((v) => (v && typeof v === 'object' && typeof (v as { name?: unknown }).name === 'string' ? (v as { name: string }).name : null))
+      .filter((n): n is string => n !== null);
+    if (names.length === value.length && names.length > 0) return names.slice(0, 3).join(', ') + (names.length > 3 ? '…' : '');
+    return `${value.length} item${value.length === 1 ? '' : 's'}`;
+  }
   return '…';
 }

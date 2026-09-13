@@ -7,6 +7,7 @@ import type {
   BreakdownResponse,
   CapabilitiesResponse,
   CoachPromptResponse,
+  CoachUsageResponse,
   CostsResponse,
   DimensionsResponse,
   EcosystemResponse,
@@ -240,5 +241,12 @@ export const api = {
 
   settings: () => request<AppSettings>('/api/settings'),
 
-  saveSettings: (s: AppSettings) => request<AppSettings>('/api/settings', { method: 'PUT', ...json(s) }),
+  /** adminPassword is only needed when switching the AI coach back ON. */
+  saveSettings: (s: AppSettings, adminPassword?: string) =>
+    request<AppSettings>('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(adminPassword ? { 'x-admin-password': adminPassword } : {}) },
+      body: JSON.stringify(s),
+    }),
+  coachUsage: () => request<CoachUsageResponse>('/api/coach/usage'),
 };

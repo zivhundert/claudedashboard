@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COACH_MIN_RANGE_DAYS,
   buildRecommendationInput,
   collectEvidenceKeys,
   daysInclusive,
+  isCoachableRange,
   isThinData,
+  priceGeneration,
   sanitizeRecommendations,
   stableStringify,
   type RecommendationInput,
   type RecommendationsPayload,
 } from '../src/recommendations.js';
-import { DEFAULT_SCORE_TARGETS } from '../src/scoring/targets.js';
 import type { LeaderboardEntry, UserDto } from '../src/types.js';
 
 function makeEntry(overrides: Partial<LeaderboardEntry['metrics']> = {}, activeDays = 15): LeaderboardEntry {
@@ -66,8 +68,6 @@ function build(entry = makeEntry()): RecommendationInput {
   return buildRecommendationInput({
     range: { from: '2026-08-15', to: '2026-09-13' },
     entry,
-    orgMedianScores: { adoption: 48.44, impact: 40.1, efficiency: 66.7, trust: 66.66 },
-    targets: DEFAULT_SCORE_TARGETS,
     coverage: { commits: 0.8, pullRequests: 0.1 },
     models: [
       { model: 'claude-opus-5', tokens: { input: 700_000, output: 200_000, cacheRead: 2_000_000, cacheCreation: 100_000 }, costCents: 7000 },
@@ -90,27 +90,49 @@ function build(entry = makeEntry()): RecommendationInput {
       mcpCalls: 40,
       mcpFailures: 2,
       activeMcpServers: 1,
+      topSkills: [
+        { name: 'review', count: 6, failurePct: null },
+        { name: 'commit', count: 4, failurePct: null },
+        { name: 'unused', count: 0, failurePct: null },
+      ],
+      subagents: [{ name: 'Explore', count: 5, failurePct: 20.4 }],
+      mcpServers: [
+        { name: 'jira', count: 30, failurePct: 6.67 },
+        { name: 'github', count: 10, failurePct: 0 },
+      ],
     },
   });
 }
 
 describe('buildRecommendationInput', () => {
-  it('rounds, scales targets by workdays and carries no identity', () => {
+  it('rounds, names the named lists, carries no identity and nothing to compare against', () => {
     const input = build();
+    expect(input.version).toBe(2);
     expect(input.range).toEqual({ from: '2026-08-15', to: '2026-09-13', days: 30, workdays: 22 });
     expect(input.activity.consistencyPct).toBe(68);
     expect(input.activity.sessionsPerWorkday).toBe(1.8);
     expect(input.cost.costUsd).toBe(84.13);
     expect(input.cost.inputTokens).toBe(1_000_000);
     expect(input.cost.cacheRatioPct).toBe(62);
-    expect(input.targets.sessions).toBe(8 * 22);
-    expect(input.targets.impactTermsCounted).toEqual(['linesAdded', 'commits']); // PR coverage 0.1 < 0.25
-    expect(input.badges.earned).toEqual(['ship_it']);
-    expect(input.badges.closest.map((b) => b.id)).toEqual(['cache_master', 'pr_machine', 'night_owl']);
+    expect(input.edits).toMatchObject({ accepted: 80, rejected: 20, acceptanceRatePct: 80, fewDecisions: false });
+    expect(input.context).toEqual({ commitsTracked: true, pullRequestsTracked: false }); // PR coverage 0.1 < 0.25
     expect(input.cost.topModels[0]).toEqual({ model: 'claude-opus-5', sharePct: 69 });
     expect(input.telemetry?.activeHours).toBe(12.3);
     expect(input.telemetry?.avgSessionMin).toBe(42);
-    expect(JSON.stringify(input)).not.toMatch(/Test Person|example\.dev/);
+    expect(input.telemetry?.topSkills).toEqual([
+      { name: 'review', count: 6, failurePct: null },
+      { name: 'commit', count: 4, failurePct: null },
+    ]); // zero-count entries dropped
+    expect(input.telemetry?.subagents).toEqual([{ name: 'Explore', count: 5, failurePct: 20 }]);
+    expect(input.telemetry?.mcpServers[0]).toEqual({ name: 'jira', count: 30, failurePct: 7 });
+    const json = JSON.stringify(input);
+    expect(json).not.toMatch(/Test Person|example\.dev/);
+    // the stand-alone framing: no scores, medians, targets, ranks or badges reach the model
+    expect(json).not.toMatch(/orgMedian|targets|badges|composite|segment|"scores"/);
+  });
+
+  it('flags few edit decisions', () => {
+    expect(build(makeEntry({ toolAccepted: 10, toolRejected: 5 })).edits.fewDecisions).toBe(true);
   });
 
   it('is deterministic under key order and sub-rounding drift', () => {
@@ -125,37 +147,40 @@ describe('buildRecommendationInput', () => {
     expect(isThinData(build(makeEntry({}, 2)))).toBe(true);
   });
 
-  it('counts inclusive days', () => {
+  it('counts inclusive days and gates the coach at 7', () => {
     expect(daysInclusive({ from: '2026-09-13', to: '2026-09-13' })).toBe(1);
     expect(daysInclusive({ from: '2026-09-01', to: '2026-09-07' })).toBe(7);
+    expect(COACH_MIN_RANGE_DAYS).toBe(7);
+    expect(isCoachableRange({ from: '2026-09-01', to: '2026-09-06' })).toBe(false);
+    expect(isCoachableRange({ from: '2026-09-01', to: '2026-09-07' })).toBe(true);
   });
 });
 
 describe('sanitizeRecommendations', () => {
   const input = build();
   const payload: RecommendationsPayload = {
-    standing: '  Solid adoption, trust could rise.  ',
+    summary: '  Daily habit, edits mostly kept.  ',
     dataThin: false,
     strengths: [
       { title: 'Habit', why: 'x', evidence: ['activity.consistencyPct', 'made.up.key'] },
       { title: 'No evidence', why: 'y', evidence: ['nope'] },
-      { title: 'Third', why: 'z', evidence: ['scores.adoption'] },
+      { title: 'Third', why: 'z', evidence: ['edits.acceptanceRatePct'] },
     ],
     recommendations: [
-      { id: '', title: 'Commit more', why: 'w', tryThis: 't', expectedEffect: { axis: 'impact', note: '' }, evidence: ['output.commits'] },
-      { id: 'commit-more', title: 'Commit more', why: 'w', tryThis: 't', expectedEffect: { axis: 'impact', note: '' }, evidence: ['output.commits'] },
-      { id: 'bad-axis', title: 'Bad', why: 'w', tryThis: 't', expectedEffect: { axis: 'speed' as 'impact', note: '' }, evidence: ['output.commits'] },
-      { id: 'ghost', title: 'Ghost', why: 'w', tryThis: 't', expectedEffect: { axis: 'trust', note: '' }, evidence: ['not.real'] },
-      { id: 'r4', title: 'Four', why: 'w', tryThis: 't', expectedEffect: { axis: 'trust', note: '' }, evidence: ['trust.acceptanceRatePct'] },
-      { id: 'r5', title: 'Five', why: 'w', tryThis: 't', expectedEffect: { axis: 'efficiency', note: '' }, evidence: ['cost.cacheRatioPct'] },
-      { id: 'r6', title: 'Six', why: 'w', tryThis: 't', expectedEffect: { axis: 'adoption', note: '' }, evidence: ['activity.sessions'] },
-      { id: 'r7', title: 'Seven', why: 'w', tryThis: 't', expectedEffect: { axis: 'adoption', note: '' }, evidence: ['activity.sessions'] },
+      { id: '', title: 'Commit more', why: 'w', tryThis: 't', expectedEffect: { area: 'delivery', note: '' }, evidence: ['output.commits'] },
+      { id: 'commit-more', title: 'Commit more', why: 'w', tryThis: 't', expectedEffect: { area: 'delivery', note: '' }, evidence: ['output.commits'] },
+      { id: 'bad-area', title: 'Bad', why: 'w', tryThis: 't', expectedEffect: { area: 'impact' as 'delivery', note: '' }, evidence: ['output.commits'] },
+      { id: 'ghost', title: 'Ghost', why: 'w', tryThis: 't', expectedEffect: { area: 'quality', note: '' }, evidence: ['not.real'] },
+      { id: 'r4', title: 'Four', why: 'w', tryThis: 't', expectedEffect: { area: 'quality', note: '' }, evidence: ['edits.acceptanceRatePct'] },
+      { id: 'r5', title: 'Five', why: 'w', tryThis: 't', expectedEffect: { area: 'efficiency', note: '' }, evidence: ['cost.cacheRatioPct'] },
+      { id: 'r6', title: 'Six', why: 'w', tryThis: 't', expectedEffect: { area: 'toolkit', note: '' }, evidence: ['telemetry.mcpServers'] },
+      { id: 'r7', title: 'Seven', why: 'w', tryThis: 't', expectedEffect: { area: 'adoption', note: '' }, evidence: ['activity.sessions'] },
     ],
   };
 
-  it('drops unknown evidence, evidence-less items, bad axes; dedupes ids; clamps counts', () => {
+  it('drops unknown evidence, evidence-less items, bad areas; dedupes ids; clamps counts', () => {
     const out = sanitizeRecommendations(payload, input);
-    expect(out.standing).toBe('Solid adoption, trust could rise.');
+    expect(out.summary).toBe('Daily habit, edits mostly kept.');
     expect(out.strengths).toHaveLength(2);
     expect(out.strengths[0]?.evidence).toEqual(['activity.consistencyPct']);
     expect(out.recommendations.map((r) => r.id)).toEqual(['commit-more', 'commit-more-2', 'r4', 'r5', 'r6']);
@@ -169,9 +194,20 @@ describe('sanitizeRecommendations', () => {
 
   it('exposes intermediate and leaf paths as valid evidence', () => {
     const keys = collectEvidenceKeys(input);
-    expect(keys.has('trust')).toBe(true);
-    expect(keys.has('trust.perTool.edit.accepted')).toBe(true);
+    expect(keys.has('edits')).toBe(true);
+    expect(keys.has('edits.perTool.edit.accepted')).toBe(true);
     expect(keys.has('telemetry.mcpCalls')).toBe(true);
+    expect(keys.has('telemetry.mcpServers')).toBe(true);
     expect(keys.has('user')).toBe(false);
+  });
+});
+
+describe('priceGeneration', () => {
+  it('bills cache writes at the input rate and cache reads at their own', () => {
+    const usd = priceGeneration(
+      { inputTokens: 1_000_000, outputTokens: 100_000, cacheReadTokens: 2_000_000, cacheWriteTokens: 500_000 },
+      { inputUsdPerMTok: 5, outputUsdPerMTok: 25, cacheReadUsdPerMTok: 0.5 },
+    );
+    expect(usd).toBeCloseTo(1.5 * 5 + 0.1 * 25 + 2 * 0.5, 6);
   });
 });

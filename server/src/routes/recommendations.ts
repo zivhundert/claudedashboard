@@ -3,47 +3,45 @@
  * POST /api/users/:idOrEmail/recommendations/regenerate?from&to — force a new generation (rate-limited)
  * GET  /api/coach/prompt                                        — built-in + custom guidance, locked contract
  * PUT  /api/coach/prompt  { guidance: string | null }           — admin only (x-admin-password header)
+ * GET  /api/coach/usage                                         — generations + tokens + estimated $ (ledger)
  *
  * Error envelope is always { error: <code>, message } — codes are listed on
  * AiCoachErrorCode in @dash/shared. The upstream HTTP status is never echoed:
  *   404 user_not_found         only when :idOrEmail resolves to nobody
  *   404 no_metrics_for_range   the person exists, no metrics snapshot for the range
- *   404 ai_disabled            no key configured (the web hides the card via /api/capabilities first)
+ *   404 ai_disabled            no key configured, or turned off in Settings (the web hides the card first)
+ *   400 range_too_short        fewer than COACH_MIN_RANGE_DAYS calendar days — refused before any model call
  *   429 rate_limited           Regenerate too soon (Retry-After set)
  *   503 model_not_deployed | auth_failed | unreachable   endpoint misconfigured / down
  *   502 anything else the endpoint did wrong on this call
  */
-import { createHash, timingSafeEqual } from 'node:crypto';
-import type { AiCoachErrorCode, CoachPromptResponse, RecommendationsResponse } from '@dash/shared';
+import {
+  COACH_MIN_RANGE_DAYS,
+  isCoachableRange,
+  type AiCoachErrorCode,
+  type CoachPromptResponse,
+  type CoachUsageResponse,
+  type RecommendationsResponse,
+} from '@dash/shared';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { CONFIG_ERROR_CODES } from '../ai/foundryClient';
 import type { AppContext } from '../context';
 import { MAX_GUIDANCE_CHARS, getCoachPrompt, setCoachGuidance } from '../services/coachPrompt';
+import { coachUsage } from '../services/coachUsage';
 import { AiUpstreamError, NoMetricsError, RateLimitedError } from '../services/recommendations';
+import { adminAuthorized } from './adminAuth';
 import { parseBody, parseRangeQuery } from './shared';
 import { findUser } from './users';
-
-const sha = (s: string): Buffer => createHash('sha256').update(s).digest();
 
 interface ErrorBody {
   error: AiCoachErrorCode;
   message: string;
 }
 
-/** true when the request carries the admin password; otherwise the 401/403 has been sent. */
-function adminAuthorized(ctx: AppContext, req: FastifyRequest, reply: FastifyReply): boolean {
-  if (!ctx.env.adminPassword) {
-    void reply.code(403).send({ error: 'admin_password_not_configured', message: 'Set ADMIN_PASSWORD on the server to allow this edit' });
-    return false;
-  }
-  const given = req.headers['x-admin-password'];
-  const value = Array.isArray(given) ? given[0] : given;
-  if (typeof value !== 'string' || !timingSafeEqual(sha(value), sha(ctx.env.adminPassword))) {
-    void reply.code(401).send({ error: 'unauthorized', message: 'Wrong admin password' });
-    return false;
-  }
-  return true;
+/** Configured AND switched on in Settings. */
+export function coachEnabled(ctx: AppContext): boolean {
+  return ctx.ai !== null && ctx.repos.settings.getMerged().aiCoachEnabled;
 }
 
 export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppContext): void {
@@ -51,10 +49,17 @@ export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppConte
 
   const handle = async (req: FastifyRequest, reply: FastifyReply, force: boolean): Promise<RecommendationsResponse | FastifyReply> => {
     if (!ctx.ai) return fail(reply, 404, { error: 'ai_disabled', message: 'No AI coach key configured (FOUNDRY_API_KEY)' });
+    if (!coachEnabled(ctx)) return fail(reply, 404, { error: 'ai_disabled', message: 'The AI coach is turned off in Settings' });
     const { idOrEmail } = req.params as { idOrEmail: string };
     const user = findUser(ctx, idOrEmail);
     if (!user || user.actor_type !== 'user') return fail(reply, 404, { error: 'user_not_found', message: `No user matches "${idOrEmail}"` });
     const q = parseRangeQuery(req.query);
+    if (!isCoachableRange(q)) {
+      return fail(reply, 400, {
+        error: 'range_too_short',
+        message: `The coach needs at least ${COACH_MIN_RANGE_DAYS} days of data — this range covers fewer`,
+      });
+    }
     try {
       return await ctx.ai.getOrGenerate(user.id, { from: q.from, to: q.to }, { force });
     } catch (err) {
@@ -78,7 +83,7 @@ export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppConte
   app.post('/api/users/:idOrEmail/recommendations/regenerate', (req, reply) => handle(req, reply, true));
 
   const promptInfo = (): CoachPromptResponse =>
-    getCoachPrompt(ctx.repos, { enabled: ctx.ai !== null, adminConfigured: ctx.env.adminPassword !== null });
+    getCoachPrompt(ctx.repos, { enabled: coachEnabled(ctx), adminConfigured: ctx.env.adminPassword !== null });
 
   app.get('/api/coach/prompt', async (): Promise<CoachPromptResponse> => promptInfo());
 
@@ -92,4 +97,6 @@ export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppConte
     req.log.info({ custom: body.guidance !== null, chars: body.guidance?.length ?? 0 }, 'ai coach: prompt updated by admin; cache cleared');
     return promptInfo();
   });
+
+  app.get('/api/coach/usage', async (): Promise<CoachUsageResponse> => coachUsage(ctx.repos, ctx.repos.settings.getMerged()));
 }

@@ -44,7 +44,10 @@ export interface Capabilities {
  * probe (one cheap request) reached it.
  */
 export interface AiCoachStatus {
+  /** a key is configured AND the Settings toggle is on — the card shows */
   enabled: boolean;
+  /** a key is configured (the toggle may still be off) */
+  configured: boolean;
   /** deployment name / proxy model alias, e.g. "claude-opus-5" or "gpt-5.6-luna" */
   model: string | null;
   /** human name of the provider, e.g. "Claude on Microsoft Foundry" or "GPT-5.6 via LiteLLM" */
@@ -68,6 +71,7 @@ export interface CapabilitiesResponse {
 
 export const AI_COACH_OFF: AiCoachStatus = {
   enabled: false,
+  configured: false,
   model: null,
   providerLabel: null,
   reachable: null,
@@ -79,7 +83,8 @@ export const AI_COACH_OFF: AiCoachStatus = {
  * Error codes the recommendations routes answer with (body `{ error, message }`):
  *   404 no_metrics_for_range — the person exists but has no metrics snapshot for the range
  *   404 user_not_found       — only when the :idOrEmail resolves to nobody
- *   404 ai_disabled          — no key configured
+ *   404 ai_disabled          — no key configured, or turned off in Settings
+ *   400 range_too_short      — fewer than COACH_MIN_RANGE_DAYS calendar days requested
  *   429 rate_limited         — Regenerate too soon (Retry-After set)
  *   503 model_not_deployed | auth_failed | unreachable — the endpoint is misconfigured or down
  *   502 upstream_rate_limited | bad_request | upstream_error | bad_answer — the endpoint failed this call
@@ -88,6 +93,7 @@ export type AiCoachErrorCode =
   | 'no_metrics_for_range'
   | 'user_not_found'
   | 'ai_disabled'
+  | 'range_too_short'
   | 'rate_limited'
   | 'model_not_deployed'
   | 'auth_failed'

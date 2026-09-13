@@ -10,12 +10,15 @@
 import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight, RotateCw, Sparkles, ThumbsUp } from 'lucide-react';
 import {
+  COACH_MIN_RANGE_DAYS,
+  RECOMMENDATION_AREA_LABELS,
+  daysInclusive,
   evidenceLabel,
   formatEvidenceValue,
   getEvidenceValue,
   type Recommendation,
+  type RecommendationArea,
   type RecommendationsResponse,
-  type ScoreAxis,
 } from '@dash/shared';
 import { useCapabilities, useRecommendations, useRegenerateRecommendations } from '@/lib/queries';
 import { ApiError } from '@/lib/api';
@@ -28,18 +31,12 @@ import { Skeleton } from '@/components/Skeleton';
 import { Button, Tip } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
-const AXIS_LABEL: Record<ScoreAxis, string> = {
-  adoption: 'Adoption',
-  impact: 'Impact',
-  efficiency: 'Efficiency',
-  trust: 'Trust',
-};
-
-const AXIS_CLASS: Record<ScoreAxis, string> = {
+const AREA_CLASS: Record<RecommendationArea, string> = {
   adoption: 'border-accent/40 bg-accent/10 text-accent',
-  impact: 'border-accent2/40 bg-accent2/10 text-accent2',
   efficiency: 'border-good/40 bg-good/10 text-good',
-  trust: 'border-warn/40 bg-warn/10 text-warn',
+  quality: 'border-warn/40 bg-warn/10 text-warn',
+  toolkit: 'border-accent2/40 bg-accent2/10 text-accent2',
+  delivery: 'border-fg/30 bg-fg/[0.06] text-fg',
 };
 
 export function CoachCard({
@@ -57,7 +54,9 @@ export function CoachCard({
 }) {
   const caps = useCapabilities().data;
   const enabled = caps?.capabilities.aiRecommendations === true;
-  const q = useRecommendations(idOrEmail, { from, to }, enabled);
+  // Short ranges say nothing about habits — no request, no model call, a quiet note instead.
+  const tooShort = daysInclusive({ from, to }) < COACH_MIN_RANGE_DAYS;
+  const q = useRecommendations(idOrEmail, { from, to }, enabled && !tooShort);
   const regen = useRegenerateRecommendations();
   const viewerEmail = usePersonaStore((s) => s.email);
   if (!enabled) return null;
@@ -91,7 +90,7 @@ export function CoachCard({
 
   return (
     <>
-      <SectionHeader title="Coach" hint="AI-generated from the numbers on this page" />
+      <SectionHeader title="Coach" hint="AI feedback on how you work with Claude Code, from the numbers on this page" />
       <ChartCard
         title="AI coach"
         chartId="ai-coach"
@@ -105,7 +104,7 @@ export function CoachCard({
         actions={
           <Tip content={data?.cached ? `Cached ${relativeDateTime(data.generatedAt)} — ask ${provider} again` : `Ask ${provider} again`}>
             <span>
-              <Button variant="ghost" onClick={onRegenerate} disabled={regen.isPending || q.isLoading} title="Regenerate">
+              <Button variant="ghost" onClick={onRegenerate} disabled={regen.isPending || q.isLoading || tooShort} title="Regenerate">
                 <RotateCw size={13} className={cn(regen.isPending && 'animate-spin')} />
                 <span className="hidden sm:inline">Regenerate</span>
               </Button>
@@ -113,7 +112,11 @@ export function CoachCard({
           </Tip>
         }
       >
-        {q.isLoading ? (
+        {tooShort ? (
+          <div className="rounded-lg border border-border bg-fg/[0.03] px-3 py-3 text-xs text-muted">
+            The coach needs at least {COACH_MIN_RANGE_DAYS} days to say anything about habits — pick a 7-day or longer range.
+          </div>
+        ) : q.isLoading ? (
           <GeneratingSkeleton />
         ) : coachError ? (
           <CoachProblem kind={coachError} error={q.error as ApiError} provider={provider} model={model} onRetry={() => void q.refetch()} />
@@ -125,11 +128,12 @@ export function CoachCard({
   );
 }
 
-type CoachProblemKind = 'misconfigured' | 'upstream' | 'no-metrics';
+type CoachProblemKind = 'misconfigured' | 'upstream' | 'no-metrics' | 'too-short';
 
 /** Which in-card state an API failure maps to; null = not a coach-specific failure. */
 function classifyCoachError(err: ApiError): CoachProblemKind | null {
   if (err.code === 'no_metrics_for_range') return 'no-metrics';
+  if (err.code === 'range_too_short') return 'too-short';
   if (err.status === 503) return 'misconfigured';
   if (err.status === 502) return 'upstream';
   return null;
@@ -148,11 +152,12 @@ function CoachProblem({
   model: string | null;
   onRetry: () => void;
 }) {
-  if (kind === 'no-metrics') {
+  if (kind === 'no-metrics' || kind === 'too-short') {
     return (
       <div className="rounded-lg border border-border bg-fg/[0.03] px-3 py-3 text-xs text-muted">
-        Not enough data for this range — no metrics were recorded for this person between the selected dates. Pick a
-        wider range or come back after a few sessions.
+        {kind === 'too-short'
+          ? `The coach needs at least ${COACH_MIN_RANGE_DAYS} days to say anything about habits — pick a longer range.`
+          : 'Not enough data for this range — no metrics were recorded for this person between the selected dates. Pick a wider range or come back after a few sessions.'}
       </div>
     );
   }
@@ -204,7 +209,7 @@ function GeneratingSkeleton() {
 function CoachBody({ data, busy }: { data: RecommendationsResponse; busy: boolean }) {
   return (
     <div className={cn('space-y-4 py-1 transition-opacity', busy && 'opacity-60')}>
-      <p className="text-[13px] leading-relaxed">{data.standing}</p>
+      <p className="text-[13px] leading-relaxed">{data.summary}</p>
 
       {data.dataThin && (
         <div className="rounded-lg border border-border bg-fg/[0.03] px-3 py-2 text-[11.5px] text-muted">
@@ -277,8 +282,8 @@ function RecommendationRow({ index, rec, data }: { index: number; rec: Recommend
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-semibold leading-snug">{rec.title}</span>
-            <span className={cn('rounded-full border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide', AXIS_CLASS[rec.expectedEffect.axis])}>
-              {AXIS_LABEL[rec.expectedEffect.axis]}
+            <span className={cn('rounded-full border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide', AREA_CLASS[rec.expectedEffect.area])}>
+              {RECOMMENDATION_AREA_LABELS[rec.expectedEffect.area]}
             </span>
           </span>
           {!open && <span className="mt-0.5 block truncate text-xs text-muted">{rec.why}</span>}
@@ -298,7 +303,7 @@ function RecommendationRow({ index, rec, data }: { index: number; rec: Recommend
           {rec.expectedEffect.note && (
             <p className="text-muted">
               <span className="font-semibold text-fg">Effect: </span>
-              lifts {AXIS_LABEL[rec.expectedEffect.axis]} — {rec.expectedEffect.note}
+              {RECOMMENDATION_AREA_LABELS[rec.expectedEffect.area].toLowerCase()} — {rec.expectedEffect.note}
             </p>
           )}
           <EvidenceChips keys={rec.evidence} data={data} />

@@ -55,4 +55,53 @@ export class AiRecommendationsRepo {
     const before = new Date(Date.now() - days * 86_400_000).toISOString();
     return this.db.prepare(`DELETE FROM ai_recommendations WHERE generated_at < ?`).run(before).changes;
   }
+
+  // --- generation ledger (never pruned; a few hundred bytes per model call) ---
+
+  logGeneration(row: AiGenerationLogRow): void {
+    this.db
+      .prepare(
+        `INSERT INTO ai_generation_log (user_id, generated_at, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, structured, attempts, duration_ms)
+         VALUES (@user_id, @generated_at, @model, @input_tokens, @output_tokens, @cache_read_tokens, @cache_write_tokens, @structured, @attempts, @duration_ms)`,
+      )
+      .run(row);
+  }
+
+  /** Token totals for generations at or after `sinceIso` (null = all time). */
+  usageSince(sinceIso: string | null): UsageTotalsRow {
+    return this.db
+      .prepare(
+        `SELECT COUNT(*) AS generations,
+                COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+                COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+                MAX(generated_at) AS last_generated_at
+         FROM ai_generation_log
+         WHERE (? IS NULL OR generated_at >= ?)`,
+      )
+      .get(sinceIso, sinceIso) as UsageTotalsRow;
+  }
+}
+
+export interface AiGenerationLogRow {
+  user_id: number;
+  generated_at: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  structured: 0 | 1;
+  attempts: number;
+  duration_ms: number;
+}
+
+export interface UsageTotalsRow {
+  generations: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  last_generated_at: string | null;
 }

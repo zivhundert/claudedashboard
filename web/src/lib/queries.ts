@@ -387,7 +387,18 @@ export function useRunSync() {
 export function useSaveSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (s: AppSettings) => api.saveSettings(s),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
+    mutationFn: ({ settings, adminPassword }: { settings: AppSettings; adminPassword?: string }) =>
+      api.saveSettings(settings, adminPassword),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['settings'] });
+      // the AI coach switch and prices live here — the card gate and the usage table must follow
+      void qc.invalidateQueries({ queryKey: ['capabilities'] });
+      void qc.invalidateQueries({ queryKey: ['coach-usage'] });
+      void qc.invalidateQueries({ queryKey: ['coach-prompt'] });
+    },
   });
+}
+
+export function useCoachUsage() {
+  return useQuery({ queryKey: ['coach-usage'], queryFn: () => api.coachUsage(), staleTime: 60_000 });
 }

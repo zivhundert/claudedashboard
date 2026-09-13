@@ -4,10 +4,10 @@
  * additionalProperties false) and a zod schema that validates whatever comes
  * back — structured or free text — before it reaches the sanitizer.
  */
-import { SCORE_AXES, type RecommendationsPayload } from '@dash/shared';
+import { RECOMMENDATION_AREAS, type RecommendationArea, type RecommendationsPayload } from '@dash/shared';
 import { z } from 'zod';
 
-const AXES = [...SCORE_AXES] as [string, ...string[]];
+const AREAS = [...RECOMMENDATION_AREAS] as [string, ...string[]];
 
 const strength = z.object({
   title: z.string().min(1).max(200),
@@ -21,14 +21,14 @@ const recommendation = z.object({
   why: z.string().min(1).max(1000),
   tryThis: z.string().min(1).max(1000),
   expectedEffect: z.object({
-    axis: z.enum(AXES),
+    area: z.enum(AREAS),
     note: z.string().max(400).default(''),
   }),
   evidence: z.array(z.string().max(120)).max(20).default([]),
 });
 
 export const RecommendationsPayloadSchema = z.object({
-  standing: z.string().min(1).max(1200),
+  summary: z.string().min(1).max(1200),
   dataThin: z.boolean().default(false),
   strengths: z.array(strength).max(10).default([]),
   recommendations: z.array(recommendation).max(12).default([]),
@@ -37,12 +37,12 @@ export const RecommendationsPayloadSchema = z.object({
 export function parsePayload(raw: unknown): RecommendationsPayload {
   const p = RecommendationsPayloadSchema.parse(raw);
   return {
-    standing: p.standing,
+    summary: p.summary,
     dataThin: p.dataThin,
     strengths: p.strengths,
     recommendations: p.recommendations.map((r) => ({
       ...r,
-      expectedEffect: { axis: r.expectedEffect.axis as RecommendationsPayload['recommendations'][number]['expectedEffect']['axis'], note: r.expectedEffect.note },
+      expectedEffect: { area: r.expectedEffect.area as RecommendationArea, note: r.expectedEffect.note },
     })),
   };
 }
@@ -51,9 +51,9 @@ export function parsePayload(raw: unknown): RecommendationsPayload {
 export const RECOMMENDATIONS_JSON_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['standing', 'dataThin', 'strengths', 'recommendations'],
+  required: ['summary', 'dataThin', 'strengths', 'recommendations'],
   properties: {
-    standing: { type: 'string' },
+    summary: { type: 'string' },
     dataThin: { type: 'boolean' },
     strengths: {
       type: 'array',
@@ -82,9 +82,9 @@ export const RECOMMENDATIONS_JSON_SCHEMA = {
           expectedEffect: {
             type: 'object',
             additionalProperties: false,
-            required: ['axis', 'note'],
+            required: ['area', 'note'],
             properties: {
-              axis: { type: 'string', enum: [...SCORE_AXES] },
+              area: { type: 'string', enum: [...RECOMMENDATION_AREAS] },
               note: { type: 'string' },
             },
           },
