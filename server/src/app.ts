@@ -24,6 +24,7 @@ import { registerTeamRoutes } from './routes/teams';
 import { registerTelemetryPackRoutes } from './routes/telemetryPacks';
 import { registerTelemetryPolicyRoutes } from './routes/telemetryPolicy';
 import { registerUserRoutes } from './routes/users';
+import { registerRecommendationRoutes } from './routes/recommendations';
 import { BadRequestError } from './routes/shared';
 
 function createServer(): FastifyInstance {
@@ -58,6 +59,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
 
   // Tee sync log lines to stdout too (the live window is the in-memory buffer).
   ctx.syncLog.setLogger(app.log);
+  ctx.ai?.setLogger(app.log);
 
   installErrorHandler(app);
 
@@ -69,6 +71,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   registerOverviewRoutes(app, ctx);
   registerLeaderboardRoutes(app, ctx);
   registerUserRoutes(app, ctx);
+  registerRecommendationRoutes(app, ctx);
   registerTeamRoutes(app, ctx);
   registerHeatmapRoutes(app, ctx);
   registerInsightRoutes(app, ctx);

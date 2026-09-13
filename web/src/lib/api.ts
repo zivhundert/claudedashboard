@@ -18,6 +18,7 @@ import type {
   LeaderboardResponse,
   McpResponse,
   OverviewResponse,
+  RecommendationsResponse,
   ReliabilityResponse,
   SkillsResponse,
   SyncJobType,
@@ -60,7 +61,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const body: unknown = await res.json();
       if (body && typeof body === 'object') {
         const rec = body as Record<string, unknown>;
-        const candidate = rec['error'] ?? rec['message'];
+        // prefer the human sentence when the route sends one; fall back to the error code
+        const candidate = rec['message'] ?? rec['error'];
         if (typeof candidate === 'string' && candidate.length > 0) msg = candidate;
       }
     } catch {
@@ -184,6 +186,17 @@ export const api = {
   /** telemetry packs — MCP servers / plugins / versions / model mix */
   entityDetail: (kind: EntityKind, name: string, q: RangeQ) =>
     request<EntityDetailResponse>(`/api/entity${qs({ kind, name, from: q.from, to: q.to, teamId: q.teamId })}`),
+
+  recommendations: (idOrEmail: string, q: Pick<RangeQ, 'from' | 'to'>) =>
+    request<RecommendationsResponse>(
+      `/api/users/${encodeURIComponent(idOrEmail)}/recommendations${qs({ from: q.from, to: q.to })}`,
+    ),
+
+  regenerateRecommendations: (idOrEmail: string, q: Pick<RangeQ, 'from' | 'to'>) =>
+    request<RecommendationsResponse>(
+      `/api/users/${encodeURIComponent(idOrEmail)}/recommendations/regenerate${qs({ from: q.from, to: q.to })}`,
+      { method: 'POST' },
+    ),
 
   breakdown: (dimension: BreakdownDimension, entity: string, q: RangeQ) =>
     request<BreakdownResponse>(

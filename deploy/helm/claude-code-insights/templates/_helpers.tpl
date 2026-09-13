@@ -72,7 +72,7 @@ Whether the chart should create its own Secret: only when no existingSecret
 is given AND at least one inline secret value is set.
 */}}
 {{- define "claude-code-insights.createSecret" -}}
-{{- if and (not .Values.secrets.existingSecret) (or .Values.secrets.otelIngestToken .Values.secrets.adminApiKey .Values.secrets.enterpriseAnalyticsKey) -}}
+{{- if and (not .Values.secrets.existingSecret) (or .Values.secrets.otelIngestToken .Values.secrets.adminApiKey .Values.secrets.enterpriseAnalyticsKey .Values.secrets.foundryApiKey) -}}
 true
 {{- end }}
 {{- end }}

@@ -16,7 +16,7 @@ import { buildLeaderboardData, entryForUser } from '../services/scoring';
 import { todayLocal } from '../util/time';
 import { parseBody, parseRangeQuery, rangeQuerySchema, zodMessage, BadRequestError } from './shared';
 
-function findUser(ctx: AppContext, idOrEmail: string): UserRow | undefined {
+export function findUser(ctx: AppContext, idOrEmail: string): UserRow | undefined {
   if (idOrEmail.includes('@')) {
     return ctx.repos.users.getByEmail(idOrEmail);
   }

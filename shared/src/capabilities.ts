@@ -34,6 +34,8 @@ export interface Capabilities {
   telemetryPacks: boolean;
   /** history predating install can exist */
   backfill: boolean;
+  /** the AI coach card: a Foundry key is configured (the server flips this on at runtime) */
+  aiRecommendations: boolean;
 }
 
 export interface CapabilitiesResponse {
@@ -62,6 +64,7 @@ export function capabilitiesFor(dataSource: DataSourceDto): Capabilities {
         liveTelemetry: false,
         telemetryPacks: true,
         backfill: true,
+        aiRecommendations: false,
       };
     case 'telemetry':
       return {
@@ -79,6 +82,7 @@ export function capabilitiesFor(dataSource: DataSourceDto): Capabilities {
         liveTelemetry: true,
         telemetryPacks: true,
         backfill: false,
+        aiRecommendations: false,
       };
     case 'console':
       return {
@@ -97,6 +101,7 @@ export function capabilitiesFor(dataSource: DataSourceDto): Capabilities {
         // server flips this true when otel events have actually been ingested
         telemetryPacks: false,
         backfill: true,
+        aiRecommendations: false,
       };
     case 'enterprise':
       return {
@@ -114,6 +119,7 @@ export function capabilitiesFor(dataSource: DataSourceDto): Capabilities {
         liveTelemetry: false,
         telemetryPacks: false,
         backfill: true,
+        aiRecommendations: false,
       };
   }
 }

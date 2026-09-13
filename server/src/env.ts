@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_ORG_TIMEZONE, type DataSourceDto, type PrivacyMode } from '@dash/shared';
 import { z } from 'zod';
+import { normalizeFoundryBaseUrl } from './ai/baseUrl';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -107,7 +108,35 @@ const schema = z.object({
   DATA_SOURCE: z.preprocess(emptyToUndef, z.enum(['demo', 'telemetry', 'console', 'enterprise']).optional()),
   /** How much detail the OTel receiver keeps (see otel/privacy.ts). */
   PRIVACY_MODE: z.preprocess(emptyToUndef, z.enum(['full', 'balanced', 'minimal']).default('balanced')),
+  /**
+   * AI coach (optional, any mode): Claude on Microsoft Foundry writes per-person
+   * recommendations on the Personal page. Off unless a key is present. The
+   * ANTHROPIC_FOUNDRY_* spellings are the SDK's own env names, accepted as
+   * fallbacks so either convention works.
+   */
+  FOUNDRY_API_KEY: z.preprocess(emptyToUndef, z.string().optional()),
+  ANTHROPIC_FOUNDRY_API_KEY: z.preprocess(emptyToUndef, z.string().optional()),
+  /** e.g. https://<resource>.services.ai.azure.com/anthropic — normalised, so the portal's Target URI works too */
+  FOUNDRY_BASE_URL: z.preprocess(emptyToUndef, z.string().url().optional()),
+  ANTHROPIC_FOUNDRY_BASE_URL: z.preprocess(emptyToUndef, z.string().url().optional()),
+  /** alternative to the base URL: the bare Foundry resource name */
+  FOUNDRY_RESOURCE: z.preprocess(emptyToUndef, z.string().optional()),
+  ANTHROPIC_FOUNDRY_RESOURCE: z.preprocess(emptyToUndef, z.string().optional()),
+  /** Foundry DEPLOYMENT name (defaults equal model ids). */
+  FOUNDRY_MODEL: z.preprocess(emptyToUndef, z.string().default('claude-opus-5')),
+  /** How long a person's coaching notes are reused before the numbers are re-checked. */
+  AI_RECOMMENDATIONS_TTL_HOURS: z.preprocess(emptyToUndef, z.coerce.number().min(1).max(720).default(24)),
 });
+
+/** Resolved AI-coach configuration; null = feature off. */
+export interface AiConfig {
+  apiKey: string;
+  /** exactly one of baseUrl / resource is set */
+  baseUrl: string | null;
+  resource: string | null;
+  model: string;
+  ttlHours: number;
+}
 
 /** Which upstream feeds the SQLite tables (the shared DTO is the one contract). */
 export type DataSource = DataSourceDto;
@@ -140,6 +169,34 @@ export interface Env {
   /** Dedicated OTLP receiver port, or null when /otel/* shares `port`. */
   otelPort: number | null;
   orgTimezone: string;
+  /** AI coach (Claude on Microsoft Foundry); null when no key is configured. */
+  ai: AiConfig | null;
+}
+
+function resolveAi(p: z.infer<typeof schema>): AiConfig | null {
+  const apiKey = p.FOUNDRY_API_KEY ?? p.ANTHROPIC_FOUNDRY_API_KEY;
+  const rawBaseUrl = p.FOUNDRY_BASE_URL ?? p.ANTHROPIC_FOUNDRY_BASE_URL;
+  const resource = p.FOUNDRY_RESOURCE ?? p.ANTHROPIC_FOUNDRY_RESOURCE;
+  if (!apiKey) {
+    if (rawBaseUrl || resource) {
+      // eslint-disable-next-line no-console
+      console.warn('warning: FOUNDRY_BASE_URL/FOUNDRY_RESOURCE set without FOUNDRY_API_KEY — AI coach stays off');
+    }
+    return null;
+  }
+  if (rawBaseUrl && resource) {
+    throw new Error('FOUNDRY_BASE_URL and FOUNDRY_RESOURCE are mutually exclusive — set one');
+  }
+  if (!rawBaseUrl && !resource) {
+    throw new Error('FOUNDRY_API_KEY requires FOUNDRY_BASE_URL (or FOUNDRY_RESOURCE)');
+  }
+  return {
+    apiKey,
+    baseUrl: rawBaseUrl ? normalizeFoundryBaseUrl(rawBaseUrl) : null,
+    resource: resource ?? null,
+    model: p.FOUNDRY_MODEL,
+    ttlHours: p.AI_RECOMMENDATIONS_TTL_HOURS,
+  };
 }
 
 export function loadEnv(): Env {
@@ -208,5 +265,6 @@ export function loadEnv(): Env {
     // OTEL_PORT equal to PORT is the single-listener setup spelled out explicitly.
     otelPort: p.OTEL_PORT !== undefined && p.OTEL_PORT !== p.PORT ? p.OTEL_PORT : null,
     orgTimezone: p.ORG_TIMEZONE,
+    ai: resolveAi(p),
   };
 }

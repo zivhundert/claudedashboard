@@ -60,6 +60,15 @@ config:
   backfillEmptyStreak: ""
   # Days of hourly (heatmap) history to backfill (default 30).
   hourlyBackfillDays: ""
+  # --- AI coach (optional; needs secrets.foundryApiKey / foundry-api-key) ---
+  # Claude deployment on Microsoft Foundry. Set ONE of the two endpoint forms:
+  # the full base URL (the portal's Target URI is fine) or the bare resource name.
+  foundryBaseUrl: ""
+  foundryResource: ""
+  # Foundry DEPLOYMENT name (default claude-opus-5).
+  foundryModel: ""
+  # Reuse a person's coaching notes this long before re-checking (default 24).
+  aiRecommendationsTtlHours: ""
 
 # Extra environment variables, verbatim (list of core/v1 EnvVar).
 # extraEnv:
@@ -73,7 +82,7 @@ extraEnv: []
 # Two ways to provide secret env values:
 #  1. existingSecret: name of a Secret you manage yourself (kubectl / ESO /
 #     CSI driver). Expected keys: otel-ingest-token, admin-api-key,
-#     enterprise-analytics-key. All keys are OPTIONAL — missing keys are
+#     enterprise-analytics-key, foundry-api-key. All keys are OPTIONAL — missing keys are
 #     simply not injected (secretKeyRef optional: true), so a secret holding
 #     only otel-ingest-token is fine.
 #  2. Inline values below: the chart creates the Secret itself. Only used
@@ -88,6 +97,8 @@ secrets:
   adminApiKey: ""
   # claude.ai Enterprise Analytics key — only for dataSource: enterprise.
   enterpriseAnalyticsKey: ""
+  # Microsoft Foundry API key — turns on the AI coach (any data source).
+  foundryApiKey: ""
 
 # ----------------------------------------------------------------------------
 # Persistence — the SQLite database (mounted at /app/data)

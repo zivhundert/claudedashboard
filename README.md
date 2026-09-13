@@ -60,6 +60,7 @@ Generated from one source of truth: [`shared/src/capabilities.ts`](shared/src/ca
 | Hourly activity / heatmaps | ✅ live | ✅ | ✅ | ✅ |
 | Costs | estimated | billed + invoice-grade cost page | billed + invoice-grade cost page | estimated |
 | Activity / Health / Skills telemetry packs | ✅ | ✅ when OTel also rolled out | with OTel rollout | ✅ (seeded) |
+| AI coach (personal recommendations) | with `FOUNDRY_API_KEY` | with `FOUNDRY_API_KEY` | with `FOUNDRY_API_KEY` | with `FOUNDRY_API_KEY` |
 | Org roster & seat counts | observed users only | ✅ roster + seats | seats | ✅ |
 | API-key inventory, service-tier & context-window mixes | — | ✅ | — | ✅ |
 | Historical backfill (pre-install history) | — (history starts at rollout) | ✅ | ✅ (from 2026-01-01) | ✅ 180 days |
@@ -137,13 +138,21 @@ Optional auth: set `OTEL_INGEST_TOKEN` in `.env` and add `"OTEL_EXPORTER_OTLP_HE
 | **Costs** | Leadership | Invoice-grade spend from the cost report (incl. web search & code execution), estimated-vs-actual reconciliation, cost by workspace & model, API-key inventory with per-key usage, service-tier mix, context-window mix |
 | **Teams** | Leadership | Team-vs-team comparison (per-active-member normalized), team score radar |
 | **Team page** | Team lead | Member table side-by-side (scores, trends, acceptance, cost), team heatmap, team insights, 2–5 member compare dialog |
-| **My profile** | Developer | Composite score & org rank, score radar vs org median, 12-month activity calendar with streaks, badge case with progress bars, personal heatmap, model mix, personal trend |
+| **My profile** | Developer | Composite score & org rank, score radar vs org median, **AI coach** (3–5 grounded recommendations, optional), 12-month activity calendar with streaks, per-person telemetry, badge case with progress bars, personal heatmap, model mix, personal trend |
 | **Leaderboard** | Everyone | Global ranks with gold/silver/bronze, segment filters, top movers, shareable compare links |
 | **Admin** | Dashboard owner | Team editor, sync status & manual triggers, settings |
 
 Every view honors the global date-range picker and day/week/month granularity; all state lives in the URL, so any view can be shared as a link.
 
 **Known caveats**: Admin API data lags ~1 hour and "today" is a partial day (Enterprise: 1–3 days); telemetry history only starts when the rollout does · Claude Code on Bedrock/Vertex is invisible to the Admin API (telemetry covers it) · PR counting requires GitHub tooling — in a non-GitHub org the Impact score automatically redistributes the PR weight and the PR badge shows "not applicable" · per-user cost is an estimate; the invoice-grade number is org-level on the Costs page (Console/Enterprise modes) · the display timezone and Sun–Thu work week are currently fixed (`web/src/lib/time.ts`, `shared/src/time/workweek.ts`) — making them configurable is a welcome first contribution.
+
+### AI coach (optional)
+
+Set `FOUNDRY_API_KEY` + `FOUNDRY_BASE_URL` (a Claude deployment on **Microsoft Foundry**, in your own tenant) and every Personal page gains a **Coach** card: a one-line "where you stand", one or two strengths, and 3–5 recommendations, each citing the exact numbers it used, naming a concrete Claude Code practice to try, and the score axis it lifts. Without a key the card does not exist.
+
+- **What leaves the server**: that person's metrics for the selected range (sessions, lines, commits, acceptance, cost, cache ratio, scores, org medians, targets, badge progress, telemetry counters) — numbers only. No name, email, prompts, code or file names; the dashboard never has prompt content anyway. The "What's collected" page states this when the feature is on.
+- **Cost & caching**: generated on demand the first time a profile is opened, cached per person and range (`AI_RECOMMENDATIONS_TTL_HOURS`, default 24) and regenerated only when the numbers move; Regenerate is limited to once per 10 minutes per person and 120 generations/hour overall. Roughly $0.07–0.10 per generation on `claude-opus-5`.
+- **Grounding**: the model's JSON is schema-validated and every evidence key it cites is checked against the input; anything it made up is dropped before display. The Foundry deployment name is `FOUNDRY_MODEL` (default `claude-opus-5`).
 
 ## Screenshots
 

@@ -102,6 +102,25 @@ spec:
             - name: HOURLY_BACKFILL_DAYS
               value: {{ .Values.config.hourlyBackfillDays | quote }}
             {{- end }}
+            {{- if and .Values.config.foundryBaseUrl .Values.config.foundryResource }}
+            {{- fail "config.foundryBaseUrl and config.foundryResource are mutually exclusive — set one" }}
+            {{- end }}
+            {{- with .Values.config.foundryBaseUrl }}
+            - name: FOUNDRY_BASE_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.foundryResource }}
+            - name: FOUNDRY_RESOURCE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.foundryModel }}
+            - name: FOUNDRY_MODEL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.aiRecommendationsTtlHours) "" }}
+            - name: AI_RECOMMENDATIONS_TTL_HOURS
+              value: {{ .Values.config.aiRecommendationsTtlHours | quote }}
+            {{- end }}
             {{- if include "claude-code-insights.hasSecret" . }}
             # All keys optional: a secret carrying only some keys is valid —
             # missing keys are skipped instead of blocking pod start.
@@ -122,6 +141,12 @@ spec:
                 secretKeyRef:
                   name: {{ include "claude-code-insights.secretName" . }}
                   key: enterprise-analytics-key
+                  optional: true
+            - name: FOUNDRY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "claude-code-insights.secretName" . }}
+                  key: foundry-api-key
                   optional: true
             {{- end }}
             {{- with .Values.extraEnv }}

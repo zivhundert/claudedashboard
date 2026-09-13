@@ -12,6 +12,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '1.0.6',
+    date: '2026-09-13',
+    highlights: [
+      'Personal page → Coach: 3–5 AI-written recommendations grounded in your own numbers vs org medians and score targets, each citing the metrics it used, a Claude Code practice to try, and the score it lifts — plus a “where you stand” line and your strengths.',
+      'Coach notes are cached per person for a day; Regenerate asks Claude again (rate-limited). Needs a Claude deployment on Microsoft Foundry (FOUNDRY_API_KEY) — the card does not exist otherwise.',
+      '“What’s collected” now states when the AI coach is on, which model, and that only numbers are sent — never prompts, code or file names.',
+    ],
+  },
+  {
     version: '1.0.5',
     date: '2026-09-10',
     highlights: [

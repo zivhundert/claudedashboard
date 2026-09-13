@@ -16,6 +16,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../context';
 import type { OtelScope } from '../repos/otelRepo';
+import { avgMs, errorRate, mean, median } from '../services/packMath';
 import { hourIsoOf } from '../util/time';
 import { parseRangeQuery, rangeQuerySchema, zodMessage, BadRequestError } from './shared';
 
@@ -40,31 +41,6 @@ function parsePacksQuery(query: unknown): ParsedPacksQuery {
   return { from: q.from, to: q.to, scope };
 }
 
-/** errors / (requests + errors); null when nothing happened. */
-function errorRate(requests: number, errors: number): number | null {
-  const denom = requests + errors;
-  return denom > 0 ? errors / denom : null;
-}
-
-/** total duration / request count; null when no requests. */
-function avgMs(totalDurationMs: number, requests: number): number | null {
-  return requests > 0 ? totalDurationMs / requests : null;
-}
-
-function mean(values: number[]): number | null {
-  if (values.length === 0) return null;
-  return values.reduce((s, v) => s + v, 0) / values.length;
-}
-
-/** standard interpolated median of an UNSORTED list; null when empty. */
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const hi = sorted[mid] ?? 0;
-  if (sorted.length % 2 === 1) return hi;
-  return ((sorted[mid - 1] ?? 0) + hi) / 2;
-}
 
 /** '2.10.1' before '2.9.3' — numeric per dot-segment, newest first. */
 function semverDesc(a: string, b: string): number {

@@ -166,6 +166,31 @@ export function useMcp(q: RangeQ & { userId?: number | undefined }, enabled = tr
   });
 }
 
+/**
+ * AI coach notes for one person. Every cache miss costs a model call, so no
+ * background refetching: stale for 10 minutes, no retry, no refetch on focus.
+ */
+export function useRecommendations(idOrEmail: string, q: Pick<RangeQ, 'from' | 'to'>, enabled: boolean) {
+  return useQuery({
+    queryKey: ['recommendations', idOrEmail, q.from ?? null, q.to ?? null],
+    queryFn: () => api.recommendations(idOrEmail, q),
+    enabled: enabled && idOrEmail !== '',
+    staleTime: 10 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useRegenerateRecommendations() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ idOrEmail, from, to }: { idOrEmail: string; from: string; to: string }) =>
+      api.regenerateRecommendations(idOrEmail, { from, to }),
+    onSuccess: (data, vars) =>
+      qc.setQueryData(['recommendations', vars.idOrEmail, vars.from, vars.to], data),
+  });
+}
+
 export function useEntityDetail(kind: EntityKind | null, name: string, q: RangeQ) {
   return useQuery({
     queryKey: ['entity', kind, name, q.from, q.to, q.teamId ?? null],
