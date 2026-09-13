@@ -1,7 +1,8 @@
 import { resolveTargets, type AppSettings } from '@dash/shared';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../context';
+import { adminAuthorized } from './adminAuth';
 import { parseBody } from './shared';
 
 const targetNum = z.number().positive().finite();
@@ -16,6 +17,11 @@ const settingsPatchSchema = z.object({
   seatCostUsdMonthly: z.number().nonnegative().optional(),
   inactiveDays: z.number().int().positive().optional(),
   decliningPct: z.number().min(0).max(100).optional(),
+  // AI coach: the kill switch (off → on needs the admin password, see below) and the $/MTok rates
+  aiCoachEnabled: z.boolean().optional(),
+  aiCoachPriceInputUsdPerMTok: z.number().nonnegative().finite().optional(),
+  aiCoachPriceOutputUsdPerMTok: z.number().nonnegative().finite().optional(),
+  aiCoachPriceCacheReadUsdPerMTok: z.number().nonnegative().finite().optional(),
   // partial: unspecified targets keep their current value (deep-merged below)
   scoreTargets: z
     .object({
@@ -62,8 +68,14 @@ export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): v
 
   app.get('/api/settings', async (): Promise<AppSettings> => merged(ctx.repos.settings.getMerged()));
 
-  app.put('/api/settings', async (req): Promise<AppSettings> => {
+  app.put('/api/settings', async (req, reply): Promise<AppSettings | FastifyReply> => {
     const patch = parseBody(settingsPatchSchema, req.body);
+    // Anyone may switch the coach OFF (it spends money); switching it back ON
+    // is the privileged direction and needs the admin password.
+    if (patch.aiCoachEnabled === true && !ctx.repos.settings.getMerged().aiCoachEnabled) {
+      if (!adminAuthorized(ctx, req, reply)) return reply;
+      req.log.info('ai coach: re-enabled by admin');
+    }
     if (patch.scoreTargets !== undefined) {
       // deep-merge the partial over what's currently effective, then store the
       // full resolved object — a stored value is always complete and valid

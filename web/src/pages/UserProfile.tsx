@@ -33,6 +33,7 @@ import {
   PersonalToolkitSection,
 } from '@/components/PersonalTelemetry';
 import { SectionHeader } from '@/components/SectionHeader';
+import { CoachCard } from '@/components/CoachCard';
 import { AcceptanceByToolChart, perToolTotal } from '@/components/AcceptanceByTool';
 import { Avatar } from '@/components/Avatar';
 import { CountryFlag } from '@/components/CountryFlag';
@@ -170,6 +171,15 @@ export default function UserProfile() {
         >
           {(ref) => <ModelDonut instanceRef={ref} models={profile.models} />}
         </ChartCard>
+
+        {/* 1b · Coach — AI recommendations; renders nothing unless a Foundry key is configured */}
+        <CoachCard
+          idOrEmail={email}
+          userName={profile.user.name}
+          profileEmail={profile.user.email}
+          from={from}
+          to={to}
+        />
 
         {/* 2 · Rhythm — consistency, volume, when, and right now */}
         <SectionHeader title="Rhythm" />

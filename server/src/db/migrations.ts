@@ -490,4 +490,48 @@ CREATE TABLE otel_skill_meta (
 );
 `,
   },
+  {
+    name: '009_ai_recommendations.sql',
+    sql: `
+-- LLM-generated personal recommendations (the AI coach), one row per person x
+-- range. input_json is the exact compact snapshot sent to the model (audit +
+-- regenerate-on-change); output_json is the validated payload. Additive only:
+-- dropping the feature leaves an unused table, nothing else.
+CREATE TABLE ai_recommendations (
+  user_id      INTEGER NOT NULL REFERENCES users(id),
+  range_key    TEXT    NOT NULL,             -- 'YYYY-MM-DD_YYYY-MM-DD'
+  generated_at TEXT    NOT NULL,             -- ISO UTC
+  model        TEXT    NOT NULL,             -- Foundry deployment name
+  input_hash   TEXT    NOT NULL,             -- sha256 of the canonical input JSON
+  input_json   TEXT    NOT NULL,
+  output_json  TEXT    NOT NULL,
+  usage_json   TEXT,                         -- token usage for cost tracking
+  PRIMARY KEY (user_id, range_key)
+);
+CREATE INDEX ix_ai_recs_generated ON ai_recommendations(generated_at);
+`,
+  },
+  {
+    name: '010_ai_generation_log.sql',
+    sql: `
+-- Append-only ledger of AI coach generations for cost tracking. The cache
+-- table (ai_recommendations) is pruned after 30 days and overwritten on
+-- regenerate, so it cannot answer "what has the coach cost so far". One row
+-- per model call that produced a note; canned answers (no call) are not logged.
+CREATE TABLE ai_generation_log (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id            INTEGER NOT NULL,
+  generated_at       TEXT    NOT NULL,          -- ISO UTC
+  model              TEXT    NOT NULL,          -- as echoed by the endpoint
+  input_tokens       INTEGER NOT NULL DEFAULT 0,
+  output_tokens      INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  structured         INTEGER NOT NULL DEFAULT 0, -- 1 = JSON-schema output was accepted
+  attempts           INTEGER NOT NULL DEFAULT 1,
+  duration_ms        INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX ix_ai_gen_log_at ON ai_generation_log(generated_at);
+`,
+  },
 ];

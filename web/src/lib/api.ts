@@ -6,6 +6,8 @@ import type {
   BreakdownDimension,
   BreakdownResponse,
   CapabilitiesResponse,
+  CoachPromptResponse,
+  CoachUsageResponse,
   CostsResponse,
   DimensionsResponse,
   EcosystemResponse,
@@ -18,6 +20,7 @@ import type {
   LeaderboardResponse,
   McpResponse,
   OverviewResponse,
+  RecommendationsResponse,
   ReliabilityResponse,
   SkillsResponse,
   SyncJobType,
@@ -40,9 +43,12 @@ export interface RangeQ {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** the server's machine-readable `error` code (e.g. "model_not_deployed"), when the body had one */
+  code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
     this.name = 'ApiError';
   }
 }
@@ -56,17 +62,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
+    let code: string | null = null;
     try {
       const body: unknown = await res.json();
       if (body && typeof body === 'object') {
         const rec = body as Record<string, unknown>;
-        const candidate = rec['error'] ?? rec['message'];
+        if (typeof rec['error'] === 'string' && rec['error'].length > 0) code = rec['error'];
+        // prefer the human sentence when the route sends one; fall back to the error code
+        const candidate = rec['message'] ?? rec['error'];
         if (typeof candidate === 'string' && candidate.length > 0) msg = candidate;
       }
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, code);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -185,6 +194,27 @@ export const api = {
   entityDetail: (kind: EntityKind, name: string, q: RangeQ) =>
     request<EntityDetailResponse>(`/api/entity${qs({ kind, name, from: q.from, to: q.to, teamId: q.teamId })}`),
 
+  recommendations: (idOrEmail: string, q: Pick<RangeQ, 'from' | 'to'>) =>
+    request<RecommendationsResponse>(
+      `/api/users/${encodeURIComponent(idOrEmail)}/recommendations${qs({ from: q.from, to: q.to })}`,
+    ),
+
+  regenerateRecommendations: (idOrEmail: string, q: Pick<RangeQ, 'from' | 'to'>) =>
+    request<RecommendationsResponse>(
+      `/api/users/${encodeURIComponent(idOrEmail)}/recommendations/regenerate${qs({ from: q.from, to: q.to })}`,
+      { method: 'POST' },
+    ),
+
+  coachPrompt: () => request<CoachPromptResponse>('/api/coach/prompt'),
+
+  /** Admin only: the password travels in a header, never in the body or URL. `null` resets to the default. */
+  saveCoachPrompt: (guidance: string | null, adminPassword: string) =>
+    request<CoachPromptResponse>('/api/coach/prompt', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+      body: JSON.stringify({ guidance }),
+    }),
+
   breakdown: (dimension: BreakdownDimension, entity: string, q: RangeQ) =>
     request<BreakdownResponse>(
       `/api/breakdown${qs({ dimension, entity, from: q.from, to: q.to, teamId: q.teamId })}`,
@@ -211,5 +241,12 @@ export const api = {
 
   settings: () => request<AppSettings>('/api/settings'),
 
-  saveSettings: (s: AppSettings) => request<AppSettings>('/api/settings', { method: 'PUT', ...json(s) }),
+  /** adminPassword is only needed when switching the AI coach back ON. */
+  saveSettings: (s: AppSettings, adminPassword?: string) =>
+    request<AppSettings>('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...(adminPassword ? { 'x-admin-password': adminPassword } : {}) },
+      body: JSON.stringify(s),
+    }),
+  coachUsage: () => request<CoachUsageResponse>('/api/coach/usage'),
 };

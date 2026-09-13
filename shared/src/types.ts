@@ -440,6 +440,16 @@ export interface AppSettings {
   decliningPct: number; // default 40 (drop vs prior 14d)
   /** fixed scoring targets (see scoring/targets.ts); partial overrides merge over defaults */
   scoreTargets: ScoreTargets;
+  /**
+   * AI coach kill switch. Turning it OFF is a plain save; turning it back ON
+   * requires the admin password (same one as the prompt editor). Has no effect
+   * when no key is configured.
+   */
+  aiCoachEnabled: boolean; // default true
+  /** $ per million tokens, used to estimate what the coach costs (Settings → AI coach) */
+  aiCoachPriceInputUsdPerMTok: number; // default 5 (Opus-class); set to your model's rate
+  aiCoachPriceOutputUsdPerMTok: number; // default 25
+  aiCoachPriceCacheReadUsdPerMTok: number; // default 0.5
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -450,6 +460,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   inactiveDays: 7,
   decliningPct: 40,
   scoreTargets: DEFAULT_SCORE_TARGETS,
+  aiCoachEnabled: true,
+  aiCoachPriceInputUsdPerMTok: 5,
+  aiCoachPriceOutputUsdPerMTok: 25,
+  aiCoachPriceCacheReadUsdPerMTok: 0.5,
 };
 
 // ---------------------------------------------------------------------------

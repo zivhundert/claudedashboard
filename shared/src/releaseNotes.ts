@@ -12,6 +12,16 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '1.0.6',
+    date: '2026-09-13',
+    highlights: [
+      'New: AI coach on the Personal page. For ranges of 7 days or more, the coach reads that person’s own numbers — activity, output, edit decisions per tool, cost and cache, and the skills, subagents and MCP servers they use — and writes a short summary, one or two strengths and 3–5 recommendations for working with Claude Code more effectively (adoption, efficiency, quality, toolkit, delivery). Each item cites the numbers it relied on and names a concrete Claude Code practice to try. It looks at the developer on their own terms: no scores, rankings or comparisons to the organisation.',
+      'How it works: notes are generated on first view and cached per person and range for a day (regenerated only when the numbers or the prompt change); Regenerate asks the model again, rate-limited. Only numbers leave the server — never names, prompts, code or file names — and “What’s collected” states when the coach is on and which provider and model answer.',
+      'Configuration: works with any Anthropic-format endpoint — a Claude deployment on Microsoft Foundry, or another model behind a proxy such as LiteLLM (e.g. GPT-5.6). Set FOUNDRY_API_KEY, FOUNDRY_BASE_URL, FOUNDRY_MODEL and AI_PROVIDER_LABEL; one check at boot reports in the banner and /api/capabilities whether the endpoint, key and model are reachable, and the card explains any misconfiguration instead of hiding.',
+      'Admin controls (Settings → AI coach): an on/off switch (turning it back on requires ADMIN_PASSWORD), the model’s $/M-token prices and a usage & estimated-cost table (today / 7d / 30d / all time), plus an editable coaching prompt behind the same password — the output format stays locked.',
+    ],
+  },
+  {
     version: '1.0.5',
     date: '2026-09-10',
     highlights: [

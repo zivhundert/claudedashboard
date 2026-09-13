@@ -24,7 +24,7 @@ Either build in Azure (no local docker needed, always the right arch):
 
 ```bash
 az acr build --registry <acrName> \
-  --image claude-code-insights:1.0.5 \
+  --image claude-code-insights:1.0.6 \
   --platform linux/amd64 .
 ```
 
@@ -34,7 +34,7 @@ mandatory — AKS node pools are amd64):
 ```bash
 az acr login --name <acrName>
 docker buildx build --platform linux/amd64 \
-  -t <acrName>.azurecr.io/claude-code-insights:1.0.5 --push .
+  -t <acrName>.azurecr.io/claude-code-insights:1.0.6 --push .
 ```
 
 ### 2. Let AKS pull from the ACR
@@ -58,15 +58,29 @@ kubectl -n claude-insights create secret generic insights-secrets \
   # optional extra keys for console/enterprise modes:
   #   --from-literal=admin-api-key=sk-ant-admin... \
   #   --from-literal=enterprise-analytics-key=...
+  #   --from-literal=foundry-api-key=...            # optional: turns on the AI coach
+  #   --from-literal=admin-password=...             # optional: lets admins edit the coach prompt
 
 helm install insights deploy/helm/claude-code-insights \
   --namespace claude-insights \
   --set image.repository=<acrName>.azurecr.io/claude-code-insights \
-  --set image.tag=1.0.5 \
+  --set image.tag=1.0.6 \
   --set secrets.existingSecret=insights-secrets \
   --set service.type=LoadBalancer \
   --set service.annotations."service\.beta\.kubernetes\.io/azure-load-balancer-internal"=true
 ```
+
+**AI coach (optional):** put `foundry-api-key` in the secret and add
+`--set config.foundryBaseUrl=https://<resource>.services.ai.azure.com/anthropic`
+(or `--set config.foundryResource=<resource>`); `--set config.foundryModel=<deployment>`
+overrides the default `claude-opus-5`. For an Anthropic-compatible proxy
+instead (e.g. an in-cluster LiteLLM), point `config.foundryBaseUrl` at its
+root (`http://litellm.llm.svc:4000` — no `/anthropic` suffix is added for
+non-Foundry hosts), set `config.foundryModel` to the proxy's alias and
+`config.aiProviderLabel` to what answers (e.g. `GPT-5.6 via LiteLLM`). The
+Coach card appears on every Personal page; the pod log's boot banner and
+`GET /api/capabilities` (`aiCoach.reachable`, `lastError`) tell you whether
+the endpoint, key and model check out.
 
 (`--set secrets.otelIngestToken=<token>` works too — the chart then creates
 the Secret — but the value lands in Helm release history.)
@@ -218,3 +232,5 @@ schedule (disk can't attach twice) or corrupt the database. Scale
 | Telemetry not arriving | (1) Endpoint wrong — must be `.../otel` with **no** `/v1/logs` suffix, and reachable from dev machines (ClusterIP is not!). (2) Token mismatch — 401s in `kubectl logs`; header format is `Authorization=Bearer <token>`. (3) Sessions not restarted — env vars load at process start; terminals restarted, IDEs fully quit and reopened. See [telemetry-setup.md](telemetry-setup.md#troubleshooting-nothing-arrives). |
 | Metrics arrive but usage pages stay empty | Missing `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta` on senders — cumulative datapoints are dropped. |
 | `exec format error` in pod logs | The image was built for arm64 — rebuild with `--platform linux/amd64`. |
+| Banner says `ai coach: on (…) — UNREACHABLE: deployment "x" does not exist at <host>` | `FOUNDRY_MODEL` is not a deployment/alias on that endpoint (Foundry answers `DeploymentNotFound`), or the base URL points at the wrong path — Foundry hosts need `/anthropic`, proxies must NOT have it. The Coach card shows the same reason. |
+| Banner says `UNREACHABLE: <host> rejected the API key` / `is unreachable` | Wrong `foundry-api-key`, or the pod cannot reach the endpoint (NetworkPolicy, wrong Service DNS). |

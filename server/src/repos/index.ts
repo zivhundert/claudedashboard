@@ -3,6 +3,7 @@ import { ApiKeyRepo } from './apiKeyRepo';
 import { BreakdownRepo } from './breakdownRepo';
 import { CostRepo } from './costRepo';
 import { DimensionsRepo } from './dimensionsRepo';
+import { AiRecommendationsRepo } from './aiRecommendationsRepo';
 import { EntityRepo } from './entityRepo';
 import { OrgSummaryRepo } from './orgSummaryRepo';
 import { OtelPacksRepo } from './otelPacksRepo';
@@ -27,6 +28,7 @@ export interface Repos {
   otelPacks: OtelPacksRepo;
   breakdown: BreakdownRepo;
   entity: EntityRepo;
+  aiRecs: AiRecommendationsRepo;
 }
 
 export function createRepos(db: Db, opts: { rosterScoped: boolean }): Repos {
@@ -44,10 +46,12 @@ export function createRepos(db: Db, opts: { rosterScoped: boolean }): Repos {
     otelPacks: new OtelPacksRepo(db),
     breakdown: new BreakdownRepo(db, opts.rosterScoped),
     entity: new EntityRepo(db),
+    aiRecs: new AiRecommendationsRepo(db),
   };
 }
 
 export {
+  AiRecommendationsRepo,
   ApiKeyRepo,
   BreakdownRepo,
   CostRepo,

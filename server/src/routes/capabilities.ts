@@ -1,7 +1,8 @@
-import { capabilitiesFor, type CapabilitiesResponse } from '@dash/shared';
+import { AI_COACH_OFF, capabilitiesFor, type CapabilitiesResponse } from '@dash/shared';
 import type { FastifyInstance } from 'fastify';
 import type { AppContext } from '../context';
 import { APP_VERSION } from '../version';
+import { coachEnabled } from './recommendations';
 
 export function registerCapabilityRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.get('/api/capabilities', async (): Promise<CapabilitiesResponse> => {
@@ -13,6 +14,13 @@ export function registerCapabilityRoutes(app: FastifyInstance, ctx: AppContext):
       const ingested = Number(ctx.repos.sync.getState('otel_events_ingested') ?? '0');
       if (Number.isFinite(ingested) && ingested > 0) capabilities.telemetryPacks = true;
     }
-    return { dataSource, capabilities, privacyMode: ctx.env.privacyMode, version: APP_VERSION };
+    // Runtime fact, not a data-source property: the AI coach exists iff a key
+    // is configured AND the Settings switch is on. Its status (provider, model,
+    // boot-probe result) rides along so a misconfigured endpoint is visible
+    // instead of a silently failing card.
+    const enabled = coachEnabled(ctx);
+    capabilities.aiRecommendations = enabled;
+    const aiCoach = ctx.ai ? { ...ctx.ai.status(), enabled } : AI_COACH_OFF;
+    return { dataSource, capabilities, privacyMode: ctx.env.privacyMode, version: APP_VERSION, aiCoach };
   });
 }

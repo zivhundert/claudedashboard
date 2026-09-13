@@ -60,6 +60,7 @@ Generated from one source of truth: [`shared/src/capabilities.ts`](shared/src/ca
 | Hourly activity / heatmaps | ✅ live | ✅ | ✅ | ✅ |
 | Costs | estimated | billed + invoice-grade cost page | billed + invoice-grade cost page | estimated |
 | Activity / Health / Skills telemetry packs | ✅ | ✅ when OTel also rolled out | with OTel rollout | ✅ (seeded) |
+| AI coach (personal recommendations) | with `FOUNDRY_API_KEY` | with `FOUNDRY_API_KEY` | with `FOUNDRY_API_KEY` | with `FOUNDRY_API_KEY` |
 | Org roster & seat counts | observed users only | ✅ roster + seats | seats | ✅ |
 | API-key inventory, service-tier & context-window mixes | — | ✅ | — | ✅ |
 | Historical backfill (pre-install history) | — (history starts at rollout) | ✅ | ✅ (from 2026-01-01) | ✅ 180 days |
@@ -137,13 +138,33 @@ Optional auth: set `OTEL_INGEST_TOKEN` in `.env` and add `"OTEL_EXPORTER_OTLP_HE
 | **Costs** | Leadership | Invoice-grade spend from the cost report (incl. web search & code execution), estimated-vs-actual reconciliation, cost by workspace & model, API-key inventory with per-key usage, service-tier mix, context-window mix |
 | **Teams** | Leadership | Team-vs-team comparison (per-active-member normalized), team score radar |
 | **Team page** | Team lead | Member table side-by-side (scores, trends, acceptance, cost), team heatmap, team insights, 2–5 member compare dialog |
-| **My profile** | Developer | Composite score & org rank, score radar vs org median, 12-month activity calendar with streaks, badge case with progress bars, personal heatmap, model mix, personal trend |
+| **My profile** | Developer | Composite score & org rank, score radar vs org median, **AI coach** (3–5 grounded recommendations, optional), 12-month activity calendar with streaks, per-person telemetry, badge case with progress bars, personal heatmap, model mix, personal trend |
 | **Leaderboard** | Everyone | Global ranks with gold/silver/bronze, segment filters, top movers, shareable compare links |
 | **Admin** | Dashboard owner | Team editor, sync status & manual triggers, settings |
 
 Every view honors the global date-range picker and day/week/month granularity; all state lives in the URL, so any view can be shared as a link.
 
 **Known caveats**: Admin API data lags ~1 hour and "today" is a partial day (Enterprise: 1–3 days); telemetry history only starts when the rollout does · Claude Code on Bedrock/Vertex is invisible to the Admin API (telemetry covers it) · PR counting requires GitHub tooling — in a non-GitHub org the Impact score automatically redistributes the PR weight and the PR badge shows "not applicable" · per-user cost is an estimate; the invoice-grade number is org-level on the Costs page (Console/Enterprise modes) · the display timezone and Sun–Thu work week are currently fixed (`web/src/lib/time.ts`, `shared/src/time/workweek.ts`) — making them configurable is a welcome first contribution.
+
+### AI coach (optional)
+
+Set `FOUNDRY_API_KEY` + `FOUNDRY_BASE_URL` and every Personal page gains a **Coach** card: a two-sentence picture of how this person works with Claude Code, one or two strengths, and 3–5 recommendations, each citing the exact numbers it used, naming a concrete Claude Code practice to try, and the area it improves (adoption, efficiency, quality, toolkit or delivery). The coach looks at the person **on their own terms** — the model never sees scores, org medians, targets, ranks or badges, only that person's activity, output, edit decisions, cost/cache, and which skills, subagents and MCP servers they use (with failure rates). It needs a range of at least **7 days**; shorter ranges show a note instead of calling the model. Without a key the card does not exist. The server talks Anthropic Messages format (`POST <base>/v1/messages`), so two kinds of endpoint work:
+
+| | Recipe A — Claude on Microsoft Foundry | Recipe B — Anthropic-compatible proxy (e.g. LiteLLM) |
+| --- | --- | --- |
+| `FOUNDRY_BASE_URL` | `https://<resource>.services.ai.azure.com/anthropic` (the portal's Target URI is fine — hosts under `*.services.ai.azure.com` are normalised to the `/anthropic` root) | the proxy root, e.g. `http://172.17.0.1:3000` — used as-is, **no `/anthropic` suffix is added**; plain `http` is accepted for private networks |
+| `FOUNDRY_MODEL` | the Foundry **deployment** name (default `claude-opus-5`) | the proxy's model alias, e.g. `gpt-5.6-luna` |
+| `AI_PROVIDER_LABEL` | defaults to "Claude on Microsoft Foundry" | set it, e.g. `GPT-5.6 via LiteLLM` — it is what the card, the "What's collected" page and the boot banner name as the author |
+
+The variable names stay `FOUNDRY_*` for both (the SDK's `ANTHROPIC_FOUNDRY_*` spellings are accepted as fallbacks). Request features that are beta on Foundry or proxy-dependent (JSON-schema output, adaptive thinking) degrade automatically: structured → text → plain.
+
+- **What leaves the server**: that person's metrics for the selected range (sessions, lines, commits, acceptance, cost, cache ratio, scores, org medians, targets, badge progress, telemetry counters) — numbers only. No name, email, prompts, code or file names; the dashboard never has prompt content anyway. The "What's collected" page states this, naming the provider and model, when the feature is on.
+- **Cost & caching**: generated on demand the first time a profile is opened, cached per person and range (`AI_RECOMMENDATIONS_TTL_HOURS`, default 24) and regenerated only when the numbers move; Regenerate is limited to once per 10 minutes per person and 120 generations/hour overall. Roughly $0.07–0.10 per generation on `claude-opus-5`.
+- **Grounding**: the model's JSON is schema-validated and every evidence key it cites is checked against the input; anything it made up is dropped before display.
+- **Fail loudly**: at boot the server sends one tiny request (plain, 16 output tokens) to prove endpoint, key and model. The banner then reads `ai coach: on (<model>, <provider>)` or `on (<model>) — UNREACHABLE: <reason>`, and `GET /api/capabilities` carries `aiCoach: { enabled, model, providerLabel, reachable, lastError }`. The card shows "AI coach misconfigured: <reason>" rather than hiding.
+- **Error codes** on `GET/POST /api/users/:id/recommendations` (body `{ error, message }`): `400 range_too_short` (under 7 days), `404 no_metrics_for_range` (person exists, no metrics for the range), `404 user_not_found` (only when the id/email matches nobody), `404 ai_disabled` (no key, or switched off in Settings), `429 rate_limited` (with `Retry-After`), `503 model_not_deployed | auth_failed | unreachable` (endpoint misconfigured or down — e.g. Foundry's `DeploymentNotFound`), `502 upstream_rate_limited | bad_request | upstream_error | bad_answer` (the endpoint failed this call). The upstream HTTP status is never echoed as ours.
+- **Editable prompt**: Admin → Settings → *AI coach prompt* lets an admin rewrite the coaching guidance (tone, priorities, house practices); the output format stays locked. Saving requires `ADMIN_PASSWORD` from the server's `.env` and clears the cached notes.
+- **Switch & spend**: Admin → Settings → *AI coach* has an on/off switch (default on; anyone can turn it off, turning it back on asks for `ADMIN_PASSWORD`), the model's $/M-token prices (input, output, cache read — set them to your model's rates), and a usage table (generations, tokens and estimated cost for today / 7d / 30d / all time) fed by an append-only ledger of every model call (`GET /api/coach/usage`).
 
 ## Screenshots
 
