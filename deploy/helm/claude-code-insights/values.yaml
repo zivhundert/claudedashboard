@@ -61,12 +61,20 @@ config:
   # Days of hourly (heatmap) history to backfill (default 30).
   hourlyBackfillDays: ""
   # --- AI coach (optional; needs secrets.foundryApiKey / foundry-api-key) ---
-  # Claude deployment on Microsoft Foundry. Set ONE of the two endpoint forms:
-  # the full base URL (the portal's Target URI is fine) or the bare resource name.
+  # Anthropic-format /v1/messages endpoint. Set ONE of the two endpoint forms:
+  #  - foundryBaseUrl: a Claude deployment on Microsoft Foundry (the portal's
+  #    Target URI is fine) OR any Anthropic-compatible proxy root such as
+  #    LiteLLM (http://litellm.llm.svc:4000 — no /anthropic suffix is added
+  #    off-Foundry, plain http is accepted in-cluster);
+  #  - foundryResource: the bare Foundry resource name.
   foundryBaseUrl: ""
   foundryResource: ""
-  # Foundry DEPLOYMENT name (default claude-opus-5).
+  # Foundry DEPLOYMENT name or the proxy's model alias (default claude-opus-5).
   foundryModel: ""
+  # What the card / transparency page / banner name as the author, e.g.
+  # "GPT-5.6 via LiteLLM". Default: "Claude on Microsoft Foundry" for a Foundry
+  # host, otherwise "Anthropic-compatible proxy".
+  aiProviderLabel: ""
   # Reuse a person's coaching notes this long before re-checking (default 24).
   aiRecommendationsTtlHours: ""
 
@@ -97,7 +105,7 @@ secrets:
   adminApiKey: ""
   # claude.ai Enterprise Analytics key — only for dataSource: enterprise.
   enterpriseAnalyticsKey: ""
-  # Microsoft Foundry API key — turns on the AI coach (any data source).
+  # AI coach API key (Microsoft Foundry key, or the proxy's key) — turns on the AI coach (any data source).
   foundryApiKey: ""
   # Password for privileged Settings edits (the AI coach prompt). Unset = read-only.
   adminPassword: ""

@@ -6,6 +6,9 @@
  *     see services/coachPrompt.ts). The default is a pure function of shared
  *     constants — no dates, no targets (those travel in the user message) — so
  *     it is byte-stable and the provider's prompt cache hits.
+ *     The wording is model-neutral: "Claude Code" is the product being coached
+ *     on, while the model writing the notes may be Claude, GPT or anything
+ *     behind an Anthropic-format endpoint.
  *   - OUTPUT_CONTRACT: the JSON shape the parser and sanitizer depend on.
  *     Always appended, never editable, so a prompt edit can't break the card.
  */

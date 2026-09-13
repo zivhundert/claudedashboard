@@ -264,9 +264,9 @@ export const METRIC_GUIDE: Record<
   },
   aiCoach: {
     name: 'Coach',
-    formula: 'Claude reads the numbers on this page vs org medians and score targets',
+    formula: 'An AI model reads the numbers on this page vs org medians and score targets',
     explanation:
-      'Recommendations are written by Claude (on Microsoft Foundry, in your tenant) from the metrics shown on this page — never from prompts, code or file names, which this dashboard does not collect. Each item cites the numbers it used. Cached up to a day; Regenerate asks again.',
+      'Recommendations are written by an AI model (the provider and model are named under the card — a Claude deployment on Microsoft Foundry or a model behind your own proxy) from the metrics shown on this page — never from prompts, code or file names, which this dashboard does not collect. Each item cites the numbers it used. Cached up to a day; Regenerate asks again.',
   },
   composite: {
     name: 'Composite score',

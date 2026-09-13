@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_ORG_TIMEZONE, type DataSourceDto, type PrivacyMode } from '@dash/shared';
 import { z } from 'zod';
-import { normalizeFoundryBaseUrl } from './ai/baseUrl';
+import { isFoundryHost, normalizeFoundryBaseUrl } from './ai/baseUrl';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -109,21 +109,34 @@ const schema = z.object({
   /** How much detail the OTel receiver keeps (see otel/privacy.ts). */
   PRIVACY_MODE: z.preprocess(emptyToUndef, z.enum(['full', 'balanced', 'minimal']).default('balanced')),
   /**
-   * AI coach (optional, any mode): Claude on Microsoft Foundry writes per-person
-   * recommendations on the Personal page. Off unless a key is present. The
+   * AI coach (optional, any mode): a model behind an Anthropic-format
+   * /v1/messages endpoint writes per-person recommendations on the Personal
+   * page. Off unless a key is present. The endpoint is either Claude on
+   * Microsoft Foundry or any Anthropic-compatible proxy (e.g. LiteLLM). The
    * ANTHROPIC_FOUNDRY_* spellings are the SDK's own env names, accepted as
    * fallbacks so either convention works.
    */
   FOUNDRY_API_KEY: z.preprocess(emptyToUndef, z.string().optional()),
   ANTHROPIC_FOUNDRY_API_KEY: z.preprocess(emptyToUndef, z.string().optional()),
-  /** e.g. https://<resource>.services.ai.azure.com/anthropic — normalised, so the portal's Target URI works too */
+  /**
+   * Foundry: https://<resource>.services.ai.azure.com/anthropic (the portal's
+   * Target URI works too). Proxy: its root, e.g. http://172.17.0.1:3000 — plain
+   * http is fine on a private network; no /anthropic suffix is added off-Foundry.
+   */
   FOUNDRY_BASE_URL: z.preprocess(emptyToUndef, z.string().url().optional()),
   ANTHROPIC_FOUNDRY_BASE_URL: z.preprocess(emptyToUndef, z.string().url().optional()),
   /** alternative to the base URL: the bare Foundry resource name */
   FOUNDRY_RESOURCE: z.preprocess(emptyToUndef, z.string().optional()),
   ANTHROPIC_FOUNDRY_RESOURCE: z.preprocess(emptyToUndef, z.string().optional()),
-  /** Foundry DEPLOYMENT name (defaults equal model ids). */
+  /** Foundry DEPLOYMENT name, or the proxy's model alias (defaults equal model ids). */
   FOUNDRY_MODEL: z.preprocess(emptyToUndef, z.string().default('claude-opus-5')),
+  /**
+   * Free-text name of what actually answers, shown in the disclosure, the
+   * transparency page and the boot banner (e.g. "GPT-5.6 via LiteLLM").
+   * Default: "Claude on Microsoft Foundry" for a Foundry host, otherwise
+   * "Anthropic-compatible proxy".
+   */
+  AI_PROVIDER_LABEL: z.preprocess(emptyToUndef, z.string().trim().min(1).max(80).optional()),
   /** How long a person's coaching notes are reused before the numbers are re-checked. */
   AI_RECOMMENDATIONS_TTL_HOURS: z.preprocess(emptyToUndef, z.coerce.number().min(1).max(720).default(24)),
   /**
@@ -142,7 +155,14 @@ export interface AiConfig {
   resource: string | null;
   model: string;
   ttlHours: number;
+  /** true for a real Microsoft Foundry endpoint (host or resource form) */
+  isFoundry: boolean;
+  /** what answers, for humans: AI_PROVIDER_LABEL or the derived default */
+  providerLabel: string;
 }
+
+export const FOUNDRY_PROVIDER_LABEL = 'Claude on Microsoft Foundry';
+export const PROXY_PROVIDER_LABEL = 'Anthropic-compatible proxy';
 
 /** Which upstream feeds the SQLite tables (the shared DTO is the one contract). */
 export type DataSource = DataSourceDto;
@@ -175,7 +195,7 @@ export interface Env {
   /** Dedicated OTLP receiver port, or null when /otel/* shares `port`. */
   otelPort: number | null;
   orgTimezone: string;
-  /** AI coach (Claude on Microsoft Foundry); null when no key is configured. */
+  /** AI coach (Foundry or an Anthropic-compatible proxy); null when no key is configured. */
   ai: AiConfig | null;
   /** Gate for privileged Settings edits (coach prompt); null = such edits refused. */
   adminPassword: string | null;
@@ -198,12 +218,16 @@ function resolveAi(p: z.infer<typeof schema>): AiConfig | null {
   if (!rawBaseUrl && !resource) {
     throw new Error('FOUNDRY_API_KEY requires FOUNDRY_BASE_URL (or FOUNDRY_RESOURCE)');
   }
+  const baseUrl = rawBaseUrl ? normalizeFoundryBaseUrl(rawBaseUrl) : null;
+  const isFoundry = resource !== undefined || (baseUrl !== null && isFoundryHost(baseUrl));
   return {
     apiKey,
-    baseUrl: rawBaseUrl ? normalizeFoundryBaseUrl(rawBaseUrl) : null,
+    baseUrl,
     resource: resource ?? null,
     model: p.FOUNDRY_MODEL,
     ttlHours: p.AI_RECOMMENDATIONS_TTL_HOURS,
+    isFoundry,
+    providerLabel: p.AI_PROVIDER_LABEL ?? (isFoundry ? FOUNDRY_PROVIDER_LABEL : PROXY_PROVIDER_LABEL),
   };
 }
 

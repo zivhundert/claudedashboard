@@ -1,11 +1,17 @@
 /**
- * Tiny stand-in for Claude on Microsoft Foundry so the AI coach can be
+ * Tiny stand-in for an Anthropic-format /v1/messages endpoint (Claude on
+ * Microsoft Foundry, or a LiteLLM-style proxy) so the AI coach can be
  * exercised end to end without spending money or needing the VPN.
  *
  *   tsx server/scripts/mock-foundry.ts                 # port 8898
  *   MOCK_MODE=text tsx server/scripts/mock-foundry.ts  # see modes below
  *
  * then start the server with FOUNDRY_API_KEY=test FOUNDRY_BASE_URL=http://localhost:8898
+ *
+ * localhost is not a Foundry host, so the server adds no /anthropic suffix and
+ * the SDK posts to http://localhost:8898/v1/messages — exactly what a proxy
+ * serves at its root. Any other path answers 404 so a wrong base URL shows up
+ * here as `model_not_deployed`, like it would in production.
  *
  * Modes (MOCK_MODE):
  *   ok            valid JSON payload as a text block               (default)
@@ -68,12 +74,12 @@ const PAYLOAD = {
   ],
 };
 
-function message(text: string) {
+function message(text: string, model: string) {
   return {
     id: `msg_mock_${Date.now()}`,
     type: 'message',
     role: 'assistant',
-    model: 'claude-opus-5',
+    model,
     content: [{ type: 'text', text }],
     stop_reason: MODE === 'refusal' ? 'refusal' : 'end_turn',
     stop_sequence: null,
@@ -99,7 +105,11 @@ const server = http.createServer((req, res) => {
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify(json));
     };
-    if (req.method !== 'POST' || !url.endsWith('/messages')) return send(404, { error: 'not found' });
+    if (req.method !== 'POST' || url.split('?')[0] !== '/v1/messages') {
+      // eslint-disable-next-line no-console
+      console.log(`[mock-foundry] 404 ${req.method ?? '?'} ${url} — this mock serves POST /v1/messages at its root`);
+      return send(404, { type: 'error', error: { type: 'not_found_error', message: `DeploymentNotFound: no route ${url}` } });
+    }
     if (!hasKey) return send(401, { type: 'error', error: { type: 'authentication_error', message: 'missing api-key' } });
     calls += 1;
     let parsed: { output_config?: { format?: unknown }; model?: string } = {};
@@ -123,7 +133,7 @@ const server = http.createServer((req, res) => {
       MODE === 'text'
         ? `Here are your coaching notes:\n\n${JSON.stringify(PAYLOAD, null, 2)}\n\nHope this helps!`
         : JSON.stringify(PAYLOAD);
-    const reply = () => send(200, message(MODE === 'refusal' ? '' : text));
+    const reply = () => send(200, message(MODE === 'refusal' ? '' : text, parsed.model ?? 'mock-model'));
     if (MODE === 'slow') setTimeout(reply, 30_000);
     else reply();
   });

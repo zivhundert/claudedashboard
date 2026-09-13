@@ -30,11 +30,12 @@ Telemetry can contain sensitive detail (Bash command lines, file paths — and p
 
 ## AI coach (optional LLM feature)
 
-When `FOUNDRY_API_KEY` is set, opening a Personal page sends that person's **metrics only** (numbers — never names, emails, prompts, code or file names) to your Claude deployment on Microsoft Foundry and stores the returned recommendations in SQLite (`ai_recommendations`, alongside the exact input that was sent, for audit).
+When `FOUNDRY_API_KEY` is set, opening a Personal page sends that person's **metrics only** (numbers — never names, emails, prompts, code or file names) to the configured Anthropic-format endpoint — your Claude deployment on Microsoft Foundry, or an Anthropic-compatible proxy such as LiteLLM in front of another model — and stores the returned recommendations in SQLite (`ai_recommendations`, alongside the exact input that was sent, for audit). Set `AI_PROVIDER_LABEL` so the disclosure names what actually answers; a proxy on a private network may be plain `http`, so treat the API key it carries as network-scoped.
 
 - The model's output is schema-validated and every metric it cites is checked against the input before display; nothing it invents is shown.
 - Because the dashboard has no authentication, anyone who can reach it can trigger generations. Spend is bounded by design: results are cached per person and range (default 24h) and only regenerated when the numbers change; Regenerate is limited to one per 10 minutes per person and 120 generations per hour overall; concurrent requests for the same person share one call; people with no activity get a canned answer without a model call.
-- The transparency page ("What's collected") states that the feature is on, which model, and the cache window. Turning it off is removing the key.
+- The transparency page ("What's collected") states that the feature is on, which provider and model, and the cache window. Turning it off is removing the key.
+- Error bodies from the coach routes carry a classified code and an operator message that may name the endpoint host and model (never the key) — e.g. `deployment "x" does not exist at proxy:3000`. Anyone who can open the dashboard can see them; that is consistent with the no-auth deployment model above.
 - The coach's guidance text is editable from Settings, gated by `ADMIN_PASSWORD` (sent as the `x-admin-password` header on the single `PUT /api/coach/prompt` route, compared in constant time, never stored in the browser). The output contract the parser depends on is not editable. Without `ADMIN_PASSWORD` the editor is read-only.
 
 ## Secrets handling

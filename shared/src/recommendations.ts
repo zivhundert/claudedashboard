@@ -159,7 +159,7 @@ export interface CoachPromptResponse {
   /** locked tail always appended to the guidance — the output JSON the parser expects */
   outputContract: string;
   updatedAt: string | null;
-  /** a Foundry key is configured (the prompt is used) */
+  /** an AI coach key is configured (the prompt is used) */
   enabled: boolean;
   /** ADMIN_PASSWORD is set on the server, so saving is possible */
   adminConfigured: boolean;

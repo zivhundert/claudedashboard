@@ -17,7 +17,7 @@ export function registerTelemetryPolicyRoutes(app: FastifyInstance, ctx: AppCont
       ...policy,
       notes: [
         ...policy.notes,
-        `AI coach is on: when someone opens a Personal page, that person's metrics (numbers only — never prompts, code or file names) are sent to Claude on Microsoft Foundry (${ctx.env.ai.model}) to write recommendations; results are cached up to ${ctx.env.ai.ttlHours}h`,
+        `AI coach is on: when someone opens a Personal page, that person's metrics (numbers only — never prompts, code or file names) are sent to ${ctx.env.ai.providerLabel} (${ctx.env.ai.model}) to write recommendations; results are cached up to ${ctx.env.ai.ttlHours}h`,
       ],
     };
   });

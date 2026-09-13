@@ -117,6 +117,10 @@ spec:
             - name: FOUNDRY_MODEL
               value: {{ . | quote }}
             {{- end }}
+            {{- with .Values.config.aiProviderLabel }}
+            - name: AI_PROVIDER_LABEL
+              value: {{ . | quote }}
+            {{- end }}
             {{- if ne (toString .Values.config.aiRecommendationsTtlHours) "" }}
             - name: AI_RECOMMENDATIONS_TTL_HOURS
               value: {{ .Values.config.aiRecommendationsTtlHours | quote }}
