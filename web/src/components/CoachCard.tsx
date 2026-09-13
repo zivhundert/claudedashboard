@@ -1,8 +1,8 @@
 /**
  * The AI coach: 3–5 recommendations written by the configured model (Claude on
  * Microsoft Foundry, or whatever sits behind an Anthropic-compatible proxy —
- * /api/capabilities says which) from this person's numbers vs org medians and
- * score targets, plus a "where you stand" line and strengths. Renders nothing
+ * /api/capabilities says which) from this person's own numbers — no scores,
+ * medians or targets — plus a summary line and strengths. Renders nothing
  * at all unless the server reports the capability (a key is configured); a
  * misconfigured endpoint is shown IN the card, never hidden. Fetches its own
  * endpoint so the rest of the Personal page never waits on a model call.
@@ -194,9 +194,9 @@ function GeneratingSkeleton() {
         Reading your numbers… the first time can take up to a minute.
       </div>
       <Skeleton className="h-4 w-3/4" />
-      <div className="grid gap-3 lg:grid-cols-[1fr_2fr]">
+      <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_2fr]">
         <Skeleton className="h-28" />
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <Skeleton className="h-16" />
           <Skeleton className="h-16" />
           <Skeleton className="h-16" />
@@ -217,8 +217,8 @@ function CoachBody({ data, busy }: { data: RecommendationsResponse; busy: boolea
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_2fr]">
-        <div className="space-y-2">
+      <div className="grid gap-4 lg:grid-cols-[minmax(260px,1fr)_2fr]">
+        <div className="min-w-0 space-y-2">
           <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted">Keep doing</div>
           {data.strengths.length === 0 ? (
             <p className="text-xs text-muted">Nothing stands out yet in this range.</p>
@@ -230,8 +230,8 @@ function CoachBody({ data, busy }: { data: RecommendationsResponse; busy: boolea
                     <ThumbsUp size={12} />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-[13px] font-semibold leading-snug">{s.title}</div>
-                    <p className="mt-1 text-xs leading-relaxed text-muted">{s.why}</p>
+                    <div className="break-words text-[13px] font-semibold leading-snug">{s.title}</div>
+                    <p className="mt-1 break-words text-xs leading-relaxed text-muted">{s.why}</p>
                     <EvidenceChips keys={s.evidence} data={data} />
                   </div>
                 </div>
@@ -240,7 +240,7 @@ function CoachBody({ data, busy }: { data: RecommendationsResponse; busy: boolea
           )}
         </div>
 
-        <div className="space-y-2">
+        <div className="min-w-0 space-y-2">
           <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted">Try next</div>
           {data.recommendations.length === 0 ? (
             <p className="text-xs text-muted">No recommendations for this range.</p>
@@ -269,7 +269,7 @@ function CoachBody({ data, busy }: { data: RecommendationsResponse; busy: boolea
 function RecommendationRow({ index, rec, data }: { index: number; rec: Recommendation; data: RecommendationsResponse }) {
   const [open, setOpen] = useState(index === 1);
   return (
-    <li className="rounded-lg border border-border">
+    <li className="min-w-0 overflow-hidden rounded-lg border border-border">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -281,7 +281,7 @@ function RecommendationRow({ index, rec, data }: { index: number; rec: Recommend
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-semibold leading-snug">{rec.title}</span>
+            <span className="break-words text-[13px] font-semibold leading-snug">{rec.title}</span>
             <span className={cn('rounded-full border px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide', AREA_CLASS[rec.expectedEffect.area])}>
               {RECOMMENDATION_AREA_LABELS[rec.expectedEffect.area]}
             </span>
@@ -291,7 +291,7 @@ function RecommendationRow({ index, rec, data }: { index: number; rec: Recommend
         <span className="mt-1 shrink-0 text-muted">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
       </button>
       {open && (
-        <div className="space-y-2 px-3 pb-3 pl-[46px] text-xs leading-relaxed">
+        <div className="space-y-2 break-words px-3 pb-3 pl-[46px] text-xs leading-relaxed">
           <p>
             <span className="font-semibold text-fg">Why: </span>
             <span className="text-muted">{rec.why}</span>
