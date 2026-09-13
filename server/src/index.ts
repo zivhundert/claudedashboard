@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   const plan = createSyncPlan(env, repos, syncLog);
   const syncManager = new SyncManager(env, repos, plan, syncLog);
 
-  // AI coach exists only when a Foundry key is configured; the card hides otherwise.
+  // AI coach exists only when a key is configured; the card hides otherwise.
   const ai = env.ai ? new RecommendationService(repos, env.ai) : null;
 
   const app = await buildApp({ env, db, repos, syncManager, syncLog, ai });
@@ -82,6 +82,16 @@ async function main(): Promise<void> {
     await otelApp.listen({ port: env.otelPort, host: '0.0.0.0' });
   }
 
+  // One cheap request proves endpoint + key + model before anyone opens a
+  // Personal page; a failure is printed loudly (and served on /api/capabilities),
+  // never fatal — the rest of the dashboard does not depend on it.
+  const aiStatus = ai ? await ai.probe() : null;
+  const aiLine = !ai || !aiStatus
+    ? 'off'
+    : aiStatus.reachable === false
+      ? `on (${ai.model}) — UNREACHABLE: ${aiStatus.lastError ?? 'unknown error'}`
+      : `on (${ai.model}, ${ai.providerLabel})`;
+
   const lines = [
     '',
     '  ┌─────────────────────────────────────────────────┐',
@@ -92,11 +102,15 @@ async function main(): Promise<void> {
     `  │  db:        ${env.dbPath.slice(0, 36).padEnd(37)}│`,
     `  │  source:    ${SOURCE_LABEL[env.dataSource].padEnd(37)}│`,
     `  │  privacy:   ${env.privacyMode.padEnd(37)}│`,
-    `  │  ai coach:  ${(env.ai ? `on (${env.ai.model})` : 'off').padEnd(37)}│`,
+    `  │  ai coach:  ${aiLine.slice(0, 36).padEnd(37)}│`,
     `  │  demo mode: ${(env.demoMode ? 'ON (no scheduler, no API calls)' : 'off').padEnd(37)}│`,
     `  │  nightly:   ${(env.demoMode ? '—' : `${env.syncCron} (${env.syncTz})`).padEnd(37)}│`,
     `  │  intraday:  ${(env.demoMode ? '—' : env.intradaySyncMinutes > 0 ? `every ${env.intradaySyncMinutes}m` : 'disabled').padEnd(37)}│`,
     '  └─────────────────────────────────────────────────┘',
+    // the box truncates; the full reason must not be lost
+    ...(ai && aiStatus?.reachable === false
+      ? [`  ⚠ ai coach UNREACHABLE (${ai.host}): ${aiStatus.lastError ?? 'unknown error'}`]
+      : []),
     '',
   ];
   // eslint-disable-next-line no-console

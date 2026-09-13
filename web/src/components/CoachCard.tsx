@@ -1,12 +1,14 @@
 /**
- * The AI coach: 3–5 recommendations written by Claude from this person's
- * numbers vs org medians and score targets, plus a "where you stand" line and
- * strengths. Renders nothing at all unless the server reports the capability
- * (a Foundry key is configured). Fetches its own endpoint so the rest of the
- * Personal page never waits on a model call.
+ * The AI coach: 3–5 recommendations written by the configured model (Claude on
+ * Microsoft Foundry, or whatever sits behind an Anthropic-compatible proxy —
+ * /api/capabilities says which) from this person's numbers vs org medians and
+ * score targets, plus a "where you stand" line and strengths. Renders nothing
+ * at all unless the server reports the capability (a key is configured); a
+ * misconfigured endpoint is shown IN the card, never hidden. Fetches its own
+ * endpoint so the rest of the Personal page never waits on a model call.
  */
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, RotateCw, Sparkles, ThumbsUp } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, RotateCw, Sparkles, ThumbsUp } from 'lucide-react';
 import {
   evidenceLabel,
   formatEvidenceValue,
@@ -53,15 +55,21 @@ export function CoachCard({
   from: string;
   to: string;
 }) {
-  const enabled = useCapabilities().data?.capabilities.aiRecommendations === true;
+  const caps = useCapabilities().data;
+  const enabled = caps?.capabilities.aiRecommendations === true;
   const q = useRecommendations(idOrEmail, { from, to }, enabled);
   const regen = useRegenerateRecommendations();
   const viewerEmail = usePersonaStore((s) => s.email);
   if (!enabled) return null;
 
   const data = q.data;
+  const provider = caps?.aiCoach.providerLabel ?? 'the AI coach';
+  const model = caps?.aiCoach.model ?? null;
   const isSelf = viewerEmail !== null && profileEmail !== null && viewerEmail === profileEmail;
   const firstName = userName.split(/[\s.]+/)[0] ?? userName;
+  // Endpoint/config failures and "no metrics" are rendered inside the card
+  // with a specific message; only unexpected errors fall to the generic ErrorCard.
+  const coachError = q.error instanceof ApiError ? classifyCoachError(q.error) : null;
 
   const onRegenerate = () =>
     regen.mutate(
@@ -72,6 +80,8 @@ export function CoachCard({
           if (e instanceof ApiError && e.status === 429) {
             const m = /(\d+) min/.exec(e.message);
             toast('Regenerate is limited', 'info', m ? `Try again in ${m[1]} min.` : 'Try again in a few minutes.');
+          } else if (e instanceof ApiError && e.status === 503) {
+            toast('AI coach misconfigured', 'error', e.message);
           } else {
             toast('Could not regenerate', 'error', e instanceof Error ? e.message : undefined);
           }
@@ -90,10 +100,10 @@ export function CoachCard({
         className="col-span-12"
         noExport
         isLoading={q.isLoading}
-        error={q.error}
+        error={coachError ? undefined : q.error}
         onRetry={() => void q.refetch()}
         actions={
-          <Tip content={data?.cached ? `Cached ${relativeDateTime(data.generatedAt)} — ask Claude again` : 'Ask Claude again'}>
+          <Tip content={data?.cached ? `Cached ${relativeDateTime(data.generatedAt)} — ask ${provider} again` : `Ask ${provider} again`}>
             <span>
               <Button variant="ghost" onClick={onRegenerate} disabled={regen.isPending || q.isLoading} title="Regenerate">
                 <RotateCw size={13} className={cn(regen.isPending && 'animate-spin')} />
@@ -105,11 +115,69 @@ export function CoachCard({
       >
         {q.isLoading ? (
           <GeneratingSkeleton />
+        ) : coachError ? (
+          <CoachProblem kind={coachError} error={q.error as ApiError} provider={provider} model={model} onRetry={() => void q.refetch()} />
         ) : data ? (
           <CoachBody data={data} busy={regen.isPending} />
         ) : null}
       </ChartCard>
     </>
+  );
+}
+
+type CoachProblemKind = 'misconfigured' | 'upstream' | 'no-metrics';
+
+/** Which in-card state an API failure maps to; null = not a coach-specific failure. */
+function classifyCoachError(err: ApiError): CoachProblemKind | null {
+  if (err.code === 'no_metrics_for_range') return 'no-metrics';
+  if (err.status === 503) return 'misconfigured';
+  if (err.status === 502) return 'upstream';
+  return null;
+}
+
+function CoachProblem({
+  kind,
+  error,
+  provider,
+  model,
+  onRetry,
+}: {
+  kind: CoachProblemKind;
+  error: ApiError;
+  provider: string;
+  model: string | null;
+  onRetry: () => void;
+}) {
+  if (kind === 'no-metrics') {
+    return (
+      <div className="rounded-lg border border-border bg-fg/[0.03] px-3 py-3 text-xs text-muted">
+        Not enough data for this range — no metrics were recorded for this person between the selected dates. Pick a
+        wider range or come back after a few sessions.
+      </div>
+    );
+  }
+  const title = kind === 'misconfigured' ? 'AI coach misconfigured' : `${provider} could not answer`;
+  return (
+    <div className="rounded-lg border border-warn/40 bg-warn/5 px-3 py-3 text-xs">
+      <div className="flex items-start gap-2">
+        <AlertTriangle size={14} className="mt-0.5 shrink-0 text-warn" />
+        <div className="min-w-0 space-y-1.5">
+          <div className="font-semibold text-fg">
+            {title}
+            {error.code && <span className="ml-2 rounded border border-border px-1 py-px font-mono text-[10px] font-normal text-muted">{error.code}</span>}
+          </div>
+          <p className="break-words leading-relaxed text-muted">{error.message}</p>
+          <p className="text-[11px] text-muted">
+            {kind === 'misconfigured'
+              ? `The server could not use ${provider}${model ? ` (${model})` : ''}. Check FOUNDRY_BASE_URL, FOUNDRY_API_KEY and FOUNDRY_MODEL on the server — the boot banner and /api/capabilities show the same reason.`
+              : 'The endpoint is configured but this request failed. Retrying usually helps; if it keeps failing, check the server log.'}
+          </p>
+          <Button onClick={onRetry}>
+            <RotateCw size={12} /> Try again
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

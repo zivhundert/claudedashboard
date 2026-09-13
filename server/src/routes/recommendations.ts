@@ -4,20 +4,32 @@
  * GET  /api/coach/prompt                                        — built-in + custom guidance, locked contract
  * PUT  /api/coach/prompt  { guidance: string | null }           — admin only (x-admin-password header)
  *
- * 404 ai_disabled when no Foundry key is configured (the web hides the card
- * via /api/capabilities first, so this is a belt-and-braces answer).
+ * Error envelope is always { error: <code>, message } — codes are listed on
+ * AiCoachErrorCode in @dash/shared. The upstream HTTP status is never echoed:
+ *   404 user_not_found         only when :idOrEmail resolves to nobody
+ *   404 no_metrics_for_range   the person exists, no metrics snapshot for the range
+ *   404 ai_disabled            no key configured (the web hides the card via /api/capabilities first)
+ *   429 rate_limited           Regenerate too soon (Retry-After set)
+ *   503 model_not_deployed | auth_failed | unreachable   endpoint misconfigured / down
+ *   502 anything else the endpoint did wrong on this call
  */
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { CoachPromptResponse, RecommendationsResponse } from '@dash/shared';
+import type { AiCoachErrorCode, CoachPromptResponse, RecommendationsResponse } from '@dash/shared';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { CONFIG_ERROR_CODES } from '../ai/foundryClient';
 import type { AppContext } from '../context';
 import { MAX_GUIDANCE_CHARS, getCoachPrompt, setCoachGuidance } from '../services/coachPrompt';
-import { AiUpstreamError, RateLimitedError } from '../services/recommendations';
+import { AiUpstreamError, NoMetricsError, RateLimitedError } from '../services/recommendations';
 import { parseBody, parseRangeQuery } from './shared';
 import { findUser } from './users';
 
 const sha = (s: string): Buffer => createHash('sha256').update(s).digest();
+
+interface ErrorBody {
+  error: AiCoachErrorCode;
+  message: string;
+}
 
 /** true when the request carries the admin password; otherwise the 401/403 has been sent. */
 function adminAuthorized(ctx: AppContext, req: FastifyRequest, reply: FastifyReply): boolean {
@@ -35,11 +47,13 @@ function adminAuthorized(ctx: AppContext, req: FastifyRequest, reply: FastifyRep
 }
 
 export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppContext): void {
+  const fail = (reply: FastifyReply, status: number, body: ErrorBody): FastifyReply => reply.code(status).send(body);
+
   const handle = async (req: FastifyRequest, reply: FastifyReply, force: boolean): Promise<RecommendationsResponse | FastifyReply> => {
-    if (!ctx.ai) return reply.code(404).send({ error: 'ai_disabled', message: 'No Foundry key configured' });
+    if (!ctx.ai) return fail(reply, 404, { error: 'ai_disabled', message: 'No AI coach key configured (FOUNDRY_API_KEY)' });
     const { idOrEmail } = req.params as { idOrEmail: string };
     const user = findUser(ctx, idOrEmail);
-    if (!user || user.actor_type !== 'user') return reply.code(404).send({ error: 'user_not_found' });
+    if (!user || user.actor_type !== 'user') return fail(reply, 404, { error: 'user_not_found', message: `No user matches "${idOrEmail}"` });
     const q = parseRangeQuery(req.query);
     try {
       return await ctx.ai.getOrGenerate(user.id, { from: q.from, to: q.to }, { force });
@@ -50,9 +64,11 @@ export function registerRecommendationRoutes(app: FastifyInstance, ctx: AppConte
           .header('Retry-After', String(err.retryAfterSec))
           .send({ error: 'rate_limited', message: err.message, retryAfterSec: err.retryAfterSec });
       }
+      if (err instanceof NoMetricsError) {
+        return fail(reply, 404, { error: 'no_metrics_for_range', message: `No metrics for this person between ${q.from} and ${q.to}` });
+      }
       if (err instanceof AiUpstreamError) {
-        if (err.status === 404) return reply.code(404).send({ error: 'user_not_found' });
-        return reply.code(502).send({ error: 'ai_upstream_error', message: err.message });
+        return fail(reply, CONFIG_ERROR_CODES.has(err.code) ? 503 : 502, { error: err.code, message: err.message });
       }
       throw err;
     }

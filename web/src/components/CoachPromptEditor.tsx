@@ -75,11 +75,11 @@ export function CoachPromptEditor() {
       </div>
 
       <p className="text-xs leading-relaxed text-muted">
-        This is the guidance Claude reads before writing a person’s recommendations: who it is, the rules, how the
+        This is the guidance the coach model reads before writing a person’s recommendations: who it is, the rules, how the
         scores work. Edit it to change tone, priorities or house practices. The output format below is locked and
         always appended, so the card keeps working whatever you write.
         {!info.enabled && (
-          <span className="text-warn"> The AI coach is currently off (no Foundry key), so the prompt is stored but unused.</span>
+          <span className="text-warn"> The AI coach is currently off (no FOUNDRY_API_KEY), so the prompt is stored but unused.</span>
         )}
       </p>
 

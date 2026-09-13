@@ -11,6 +11,6 @@ export interface AppContext {
   repos: Repos;
   syncManager: SyncManager;
   syncLog: SyncLogBus;
-  /** AI coach; null when no Foundry key is configured (the card is hidden). */
+  /** AI coach; null when no FOUNDRY_API_KEY is configured (the card is hidden). */
   ai: RecommendationService | null;
 }

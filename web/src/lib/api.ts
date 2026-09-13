@@ -42,9 +42,12 @@ export interface RangeQ {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** the server's machine-readable `error` code (e.g. "model_not_deployed"), when the body had one */
+  code: string | null;
+  constructor(status: number, message: string, code: string | null = null) {
     super(message);
     this.status = status;
+    this.code = code;
     this.name = 'ApiError';
   }
 }
@@ -58,10 +61,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     let msg = `${res.status} ${res.statusText}`;
+    let code: string | null = null;
     try {
       const body: unknown = await res.json();
       if (body && typeof body === 'object') {
         const rec = body as Record<string, unknown>;
+        if (typeof rec['error'] === 'string' && rec['error'].length > 0) code = rec['error'];
         // prefer the human sentence when the route sends one; fall back to the error code
         const candidate = rec['message'] ?? rec['error'];
         if (typeof candidate === 'string' && candidate.length > 0) msg = candidate;
@@ -69,7 +74,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, msg);
+    throw new ApiError(res.status, msg, code);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;

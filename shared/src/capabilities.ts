@@ -38,13 +38,64 @@ export interface Capabilities {
   aiRecommendations: boolean;
 }
 
+/**
+ * AI coach runtime status. `enabled` mirrors capabilities.aiRecommendations;
+ * the rest lets the UI and operators see WHAT answers and whether the boot
+ * probe (one cheap request) reached it.
+ */
+export interface AiCoachStatus {
+  enabled: boolean;
+  /** deployment name / proxy model alias, e.g. "claude-opus-5" or "gpt-5.6-luna" */
+  model: string | null;
+  /** human name of the provider, e.g. "Claude on Microsoft Foundry" or "GPT-5.6 via LiteLLM" */
+  providerLabel: string | null;
+  /** null = not probed yet */
+  reachable: boolean | null;
+  /** classified message of the last failed probe/generation; null when healthy */
+  lastError: string | null;
+  /** ISO time of the last probe or generation outcome */
+  checkedAt: string | null;
+}
+
 export interface CapabilitiesResponse {
   dataSource: DataSourceDto;
   capabilities: Capabilities;
   privacyMode: PrivacyMode;
   /** Running server's product version (root package.json), e.g. "1.0.0". */
   version: string;
+  aiCoach: AiCoachStatus;
 }
+
+export const AI_COACH_OFF: AiCoachStatus = {
+  enabled: false,
+  model: null,
+  providerLabel: null,
+  reachable: null,
+  lastError: null,
+  checkedAt: null,
+};
+
+/**
+ * Error codes the recommendations routes answer with (body `{ error, message }`):
+ *   404 no_metrics_for_range — the person exists but has no metrics snapshot for the range
+ *   404 user_not_found       — only when the :idOrEmail resolves to nobody
+ *   404 ai_disabled          — no key configured
+ *   429 rate_limited         — Regenerate too soon (Retry-After set)
+ *   503 model_not_deployed | auth_failed | unreachable — the endpoint is misconfigured or down
+ *   502 upstream_rate_limited | bad_request | upstream_error | bad_answer — the endpoint failed this call
+ */
+export type AiCoachErrorCode =
+  | 'no_metrics_for_range'
+  | 'user_not_found'
+  | 'ai_disabled'
+  | 'rate_limited'
+  | 'model_not_deployed'
+  | 'auth_failed'
+  | 'unreachable'
+  | 'upstream_rate_limited'
+  | 'bad_request'
+  | 'upstream_error'
+  | 'bad_answer';
 
 export function capabilitiesFor(dataSource: DataSourceDto): Capabilities {
   switch (dataSource) {
