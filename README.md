@@ -148,11 +148,21 @@ Every view honors the global date-range picker and day/week/month granularity; a
 
 ### AI coach (optional)
 
-Set `FOUNDRY_API_KEY` + `FOUNDRY_BASE_URL` (a Claude deployment on **Microsoft Foundry**, in your own tenant) and every Personal page gains a **Coach** card: a one-line "where you stand", one or two strengths, and 3–5 recommendations, each citing the exact numbers it used, naming a concrete Claude Code practice to try, and the score axis it lifts. Without a key the card does not exist.
+Set `FOUNDRY_API_KEY` + `FOUNDRY_BASE_URL` and every Personal page gains a **Coach** card: a one-line "where you stand", one or two strengths, and 3–5 recommendations, each citing the exact numbers it used, naming a concrete Claude Code practice to try, and the score axis it lifts. Without a key the card does not exist. The server talks Anthropic Messages format (`POST <base>/v1/messages`), so two kinds of endpoint work:
 
-- **What leaves the server**: that person's metrics for the selected range (sessions, lines, commits, acceptance, cost, cache ratio, scores, org medians, targets, badge progress, telemetry counters) — numbers only. No name, email, prompts, code or file names; the dashboard never has prompt content anyway. The "What's collected" page states this when the feature is on.
+| | Recipe A — Claude on Microsoft Foundry | Recipe B — Anthropic-compatible proxy (e.g. LiteLLM) |
+| --- | --- | --- |
+| `FOUNDRY_BASE_URL` | `https://<resource>.services.ai.azure.com/anthropic` (the portal's Target URI is fine — hosts under `*.services.ai.azure.com` are normalised to the `/anthropic` root) | the proxy root, e.g. `http://172.17.0.1:3000` — used as-is, **no `/anthropic` suffix is added**; plain `http` is accepted for private networks |
+| `FOUNDRY_MODEL` | the Foundry **deployment** name (default `claude-opus-5`) | the proxy's model alias, e.g. `gpt-5.6-luna` |
+| `AI_PROVIDER_LABEL` | defaults to "Claude on Microsoft Foundry" | set it, e.g. `GPT-5.6 via LiteLLM` — it is what the card, the "What's collected" page and the boot banner name as the author |
+
+The variable names stay `FOUNDRY_*` for both (the SDK's `ANTHROPIC_FOUNDRY_*` spellings are accepted as fallbacks). Request features that are beta on Foundry or proxy-dependent (JSON-schema output, adaptive thinking) degrade automatically: structured → text → plain.
+
+- **What leaves the server**: that person's metrics for the selected range (sessions, lines, commits, acceptance, cost, cache ratio, scores, org medians, targets, badge progress, telemetry counters) — numbers only. No name, email, prompts, code or file names; the dashboard never has prompt content anyway. The "What's collected" page states this, naming the provider and model, when the feature is on.
 - **Cost & caching**: generated on demand the first time a profile is opened, cached per person and range (`AI_RECOMMENDATIONS_TTL_HOURS`, default 24) and regenerated only when the numbers move; Regenerate is limited to once per 10 minutes per person and 120 generations/hour overall. Roughly $0.07–0.10 per generation on `claude-opus-5`.
-- **Grounding**: the model's JSON is schema-validated and every evidence key it cites is checked against the input; anything it made up is dropped before display. The Foundry deployment name is `FOUNDRY_MODEL` (default `claude-opus-5`).
+- **Grounding**: the model's JSON is schema-validated and every evidence key it cites is checked against the input; anything it made up is dropped before display.
+- **Fail loudly**: at boot the server sends one tiny request (plain, 16 output tokens) to prove endpoint, key and model. The banner then reads `ai coach: on (<model>, <provider>)` or `on (<model>) — UNREACHABLE: <reason>`, and `GET /api/capabilities` carries `aiCoach: { enabled, model, providerLabel, reachable, lastError }`. The card shows "AI coach misconfigured: <reason>" rather than hiding.
+- **Error codes** on `GET/POST /api/users/:id/recommendations` (body `{ error, message }`): `404 no_metrics_for_range` (person exists, no metrics for the range), `404 user_not_found` (only when the id/email matches nobody), `404 ai_disabled`, `429 rate_limited` (with `Retry-After`), `503 model_not_deployed | auth_failed | unreachable` (endpoint misconfigured or down — e.g. Foundry's `DeploymentNotFound`), `502 upstream_rate_limited | bad_request | upstream_error | bad_answer` (the endpoint failed this call). The upstream HTTP status is never echoed as ours.
 - **Editable prompt**: Admin → Settings → *AI coach prompt* lets an admin rewrite the coaching guidance (tone, priorities, house practices); the output format stays locked. Saving requires `ADMIN_PASSWORD` from the server's `.env` and clears the cached notes.
 
 ## Screenshots
