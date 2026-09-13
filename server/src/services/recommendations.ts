@@ -157,15 +157,18 @@ export class RecommendationService {
     const softTtlMs = ttlMs / 4;
     const age = row ? Date.now() - Date.parse(row.generated_at) : Infinity;
 
-    if (row && !force && age < softTtlMs) return this.fromRow(row, true, null);
-
     // The cache key covers the numbers AND the prompt in force: an admin edit
-    // of the guidance regenerates on the next view even if nothing else moved.
+    // of the guidance, or a deploy that changes the built-in guidance,
+    // regenerates on the next view even if nothing else moved — including
+    // inside the soft-TTL window, so a prompt change never serves old text.
     const promptHash = guidanceHash(this.repos);
     const combined = (inputHash: string) => `${inputHash}:${promptHash}`;
+    const samePrompt = row !== undefined && row.input_hash.endsWith(`:${promptHash}`);
+
+    if (row && !force && samePrompt && age < softTtlMs) return this.fromRow(row, true, null);
 
     let assembled: AssembledInput | null = null;
-    if (row && !force && age < ttlMs) {
+    if (row && !force && samePrompt && age < ttlMs) {
       assembled = buildRecommendationInputForUser(this.repos, userId, range);
       if (assembled && combined(assembled.hash) === row.input_hash) return this.fromRow(row, true, null);
     }
