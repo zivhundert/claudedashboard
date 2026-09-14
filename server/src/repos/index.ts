@@ -9,6 +9,7 @@ import { OrgSummaryRepo } from './orgSummaryRepo';
 import { OtelPacksRepo } from './otelPacksRepo';
 import { OtelRepo } from './otelRepo';
 import { SettingsRepo } from './settingsRepo';
+import { SkillCatalogRepo } from './skillCatalogRepo';
 import { SyncRepo } from './syncRepo';
 import { TeamRepo } from './teamRepo';
 import { UsageRepo } from './usageRepo';
@@ -29,6 +30,7 @@ export interface Repos {
   breakdown: BreakdownRepo;
   entity: EntityRepo;
   aiRecs: AiRecommendationsRepo;
+  skillCatalog: SkillCatalogRepo;
 }
 
 export function createRepos(db: Db, opts: { rosterScoped: boolean }): Repos {
@@ -47,6 +49,7 @@ export function createRepos(db: Db, opts: { rosterScoped: boolean }): Repos {
     breakdown: new BreakdownRepo(db, opts.rosterScoped),
     entity: new EntityRepo(db),
     aiRecs: new AiRecommendationsRepo(db),
+    skillCatalog: new SkillCatalogRepo(db),
   };
 }
 
@@ -61,6 +64,7 @@ export {
   OtelPacksRepo,
   OtelRepo,
   SettingsRepo,
+  SkillCatalogRepo,
   SyncRepo,
   TeamRepo,
   UsageRepo,
