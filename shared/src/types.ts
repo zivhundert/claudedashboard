@@ -620,6 +620,75 @@ export interface SkillsResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Skill catalog — GET/POST /api/skills/catalog. Telemetry events carry only
+// `skill.name`, so every human-readable detail (what a skill does, where it
+// comes from, what it is allowed to touch) is scraped from SKILL.md frontmatter
+// by `pnpm skills:scan` on a machine that has the skills installed and pushed
+// here. Entries join to SkillUsageRow.skillName; skills whose names telemetry
+// redacted (custom_skill / third-party) simply never match an entry.
+// ---------------------------------------------------------------------------
+
+export const SKILL_SOURCES = ['personal', 'project', 'plugin', 'builtin'] as const;
+export type SkillSource = (typeof SKILL_SOURCES)[number];
+
+export interface SkillCatalogEntry {
+  /** invocation name — the join key to SkillUsageRow.skillName */
+  name: string;
+  source: SkillSource;
+  /** plugin that ships the skill; '' for every other source */
+  pluginName: string;
+  description: string;
+  /** frontmatter `version`, null when the skill does not declare one */
+  version: string | null;
+  /** frontmatter `allowed-tools`; [] means the skill restricts nothing */
+  allowedTools: string[];
+  /** frontmatter `model` pin, null when unset */
+  model: string | null;
+  /** home-relative directory the SKILL.md was scanned from */
+  path: string | null;
+  /** machine label that last reported this entry */
+  reportedBy: string | null;
+  /** UTC timestamp of the last upload that touched this entry */
+  updatedAt: string;
+}
+
+export interface SkillCatalogResponse {
+  entries: SkillCatalogEntry[];
+  /** newest updatedAt across entries, null when the catalog is empty */
+  lastUpdatedAt: string | null;
+}
+
+/** One scanned skill on the wire; the server fills reportedBy/updatedAt. */
+export interface SkillCatalogUploadEntry {
+  name: string;
+  source: SkillSource;
+  pluginName?: string;
+  description?: string;
+  version?: string | null;
+  allowedTools?: string[];
+  model?: string | null;
+  path?: string | null;
+}
+
+export interface SkillCatalogUpload {
+  /** machine label recorded against every entry in the batch */
+  reportedBy?: string;
+  entries: SkillCatalogUploadEntry[];
+  /**
+   * When true, entries previously reported by this same `reportedBy` that are
+   * absent from the batch are deleted — how an uninstalled skill leaves the
+   * catalog. Requires `reportedBy`.
+   */
+  replaceReporter?: boolean;
+}
+
+export interface SkillCatalogUploadResult {
+  upserted: number;
+  deleted: number;
+  total: number;
+}
+
+// ---------------------------------------------------------------------------
 // Telemetry packs — GET /api/telemetry/{activity,reliability,governance,
 // ecosystem}. All accept from/to (+ optional teamId, userId like /api/skills).
 // Data source: OTel events/metrics rollup tables (migration 006).

@@ -126,6 +126,19 @@ Prompt and response **content is never collected** in any mode (Claude Code reda
 
 Optional auth: set `OTEL_INGEST_TOKEN` in `.env` and add `"OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer <token>"` to the settings snippet. Optional split port: set `OTEL_PORT` (e.g. `4318`) to serve the receiver on its own listener — `/otel/*` then leaves the dashboard port entirely, so you can expose only `OTEL_PORT` to dev machines and keep the UI internal; point `OTEL_EXPORTER_OTLP_ENDPOINT` at `http://<dashboard-host>:<OTEL_PORT>/otel`. Events carry `user.email`, so they join the same people you see everywhere else. Daily buckets use the org-local calendar day — `ORG_TIMEZONE`, default `Asia/Jerusalem` — matching the Sun–Thu workweek the scores and streaks are built on, so work past midnight lands on the day you'd call it. Hour buckets stay UTC and are converted for display, and hour-bounded queries convert the local-day range rather than assuming the two line up. Rows ingested before this change are still keyed by UTC day. A batch larger than `OTEL_MAX_BODY_MB` (default 8) is rejected and counted in `otel_batch_too_large` — raise it if that counter climbs, but note that every accepted byte is parsed synchronously, so keep `OTEL_INGEST_TOKEN` set if the receiver is reachable beyond a trusted network. Only configured machines send data — the dashboard shows coverage as the rollout ramps.
 
+### Skill catalog
+
+Telemetry events carry only `skill.name` — never a description, a source, or what a skill is allowed to touch. `pnpm skills:scan` fills that gap: run it on any machine where the skills are installed and it walks `~/.claude/skills`, the plugin cache (`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills`) and the current repo's `.claude/skills`, parses each `SKILL.md` frontmatter, and pushes the result to `POST /api/skills/catalog`.
+
+```bash
+pnpm skills:scan -- --dry-run                    # print what would be pushed
+pnpm skills:scan                                 # push to http://localhost:8080
+pnpm skills:scan -- --url http://dashboard:8642  # or DASHBOARD_URL
+pnpm skills:scan -- --project ~/work/other-repo  # extra .claude/skills root
+```
+
+The Skills tab then shows each skill's description, source badge, version, allowed tools and scan provenance when you click it, and a footer line saying how much of what ran is actually described. Writes reuse `OTEL_INGEST_TOKEN` — the same secret the exporter uses — so no second credential to distribute; reads are open like the rest of the API. Re-running replaces everything that machine reported last time, so uninstalled skills drop out. Names redacted by `PRIVACY_MODE` (`custom_skill`, `third-party`) can never match an entry, and the drawer says so rather than claiming the skill is undocumented.
+
 ## What it shows
 
 | Page | For | Highlights |
@@ -215,6 +228,7 @@ A production Helm chart lives at [deploy/helm/claude-code-insights](deploy/helm/
 | `pnpm dev` | server (`:8080`, tsx watch) + web (`:5173`, Vite HMR) |
 | `pnpm run dev:demo` | same, with `DEMO_MODE=1` |
 | `pnpm seed` | reset + seed the demo database (`data/dashboard.db`) |
+| `pnpm skills:scan` | scan this machine's `SKILL.md` files and push the catalog (add `-- --dry-run` to preview) |
 | `pnpm build` | typecheck-build all packages → `server/dist` + `web/dist` |
 | `pnpm start` | production: single Node process serving SPA + API |
 | `pnpm test` | scoring-engine unit tests (vitest) |

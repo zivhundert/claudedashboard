@@ -1,15 +1,44 @@
-import type { AgentUsageRow, SkillsResponse, SkillUsageRow, ToolUsageRow, UserSkillRow } from '@dash/shared';
-import type { FastifyInstance } from 'fastify';
+import {
+  SKILL_SOURCES,
+  type AgentUsageRow,
+  type SkillCatalogResponse,
+  type SkillCatalogUploadResult,
+  type SkillsResponse,
+  type SkillUsageRow,
+  type ToolUsageRow,
+  type UserSkillRow,
+} from '@dash/shared';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../context';
 import type { OtelScope } from '../repos/otelRepo';
-import { parseRangeQuery, rangeQuerySchema, zodMessage, BadRequestError } from './shared';
+import { parseBody, parseRangeQuery, rangeQuerySchema, zodMessage, BadRequestError } from './shared';
 
 const TOOL_CAP = 25;
+/** One scanner run reports a whole machine's skills; well past any real install. */
+const CATALOG_MAX_ENTRIES = 2000;
 
 const skillsQuerySchema = rangeQuerySchema.extend({
   /** scopes skills/agents/tools to one user; users[] comes back empty */
   userId: z.coerce.number().int().positive().optional(),
+});
+
+/** Frontmatter is author-controlled text — every field is length-capped here. */
+const catalogEntrySchema = z.object({
+  name: z.string().min(1).max(120),
+  source: z.enum(SKILL_SOURCES),
+  pluginName: z.string().max(120).optional(),
+  description: z.string().max(2000).optional(),
+  version: z.string().max(60).nullish(),
+  allowedTools: z.array(z.string().max(120)).max(100).optional(),
+  model: z.string().max(80).nullish(),
+  path: z.string().max(400).nullish(),
+});
+
+const catalogUploadSchema = z.object({
+  reportedBy: z.string().min(1).max(120).optional(),
+  entries: z.array(catalogEntrySchema).max(CATALOG_MAX_ENTRIES),
+  replaceReporter: z.boolean().optional(),
 });
 
 function rate(success: number, failure: number): number | null {
@@ -83,5 +112,39 @@ export function registerSkillRoutes(app: FastifyInstance, ctx: AppContext): void
         lastEventAt: ctx.repos.sync.getState('otel_last_event_at'),
       },
     };
+  });
+
+  // -------------------------------------------------------------------------
+  // Skill catalog — the metadata telemetry cannot carry. Read is open like the
+  // rest of the dashboard API; writes reuse OTEL_INGEST_TOKEN, because the
+  // uploader is the same fleet of dev machines that pushes OTLP and a second
+  // secret to distribute would only be a second secret to leak.
+  // -------------------------------------------------------------------------
+
+  const authorizedToWrite = (req: FastifyRequest, reply: FastifyReply): boolean => {
+    const token = ctx.env.otelIngestToken;
+    if (!token) return true;
+    if (req.headers.authorization === `Bearer ${token}`) return true;
+    void reply.code(401).send({ error: 'unauthorized' });
+    return false;
+  };
+
+  app.get('/api/skills/catalog', async (): Promise<SkillCatalogResponse> => ({
+    entries: ctx.repos.skillCatalog.list(),
+    lastUpdatedAt: ctx.repos.skillCatalog.lastUpdatedAt(),
+  }));
+
+  app.post('/api/skills/catalog', async (req, reply): Promise<SkillCatalogUploadResult | undefined> => {
+    if (!authorizedToWrite(req, reply)) return undefined;
+    const body = parseBody(catalogUploadSchema, req.body);
+    if (body.replaceReporter && body.reportedBy === undefined) {
+      throw new BadRequestError('replaceReporter requires reportedBy');
+    }
+    const { upserted, deleted } = ctx.repos.skillCatalog.upsertBatch(
+      body.entries,
+      body.reportedBy ?? null,
+      body.replaceReporter ?? false,
+    );
+    return { upserted, deleted, total: ctx.repos.skillCatalog.list().length };
   });
 }

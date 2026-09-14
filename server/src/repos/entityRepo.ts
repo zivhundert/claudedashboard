@@ -122,6 +122,27 @@ function rate(num: number, den: number): number | null {
   return den > 0 ? num / den : null;
 }
 
+/** allowed_tools is stored as JSON; a malformed row degrades to [] rather than throwing. */
+function parseAllowedTools(raw: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** SKILL.md frontmatter from the scanner (migration 011) — what no event carries. */
+interface SkillCatalogRow {
+  description: string;
+  version: string | null;
+  allowed_tools: string;
+  model: string | null;
+  path: string | null;
+  reported_by: string | null;
+  updated_at: string;
+}
+
 interface SkillMetaRow {
   source: string | null;
   kind: string | null;
@@ -252,6 +273,28 @@ export class EntityRepo {
           }
         } else {
           facts.push({ label: 'Source', value: 'Unknown — no skill_activated event carried source details yet' });
+        }
+        // Frontmatter facts: description, version, allowed-tools and path exist
+        // only in the SKILL.md on disk, so they arrive via `pnpm skills:scan`
+        // rather than telemetry. Absent until someone runs it — a quiet gap,
+        // not an error, so nothing is pushed when there is no row.
+        const cat = this.db
+          .prepare(
+            `SELECT description, version, allowed_tools, model, path, reported_by, updated_at
+               FROM skill_catalog WHERE name = ? ORDER BY updated_at DESC LIMIT 1`,
+          )
+          .get(name) as SkillCatalogRow | undefined;
+        if (cat) {
+          if (cat.description) facts.push({ label: 'Description', value: cat.description });
+          if (cat.version) facts.push({ label: 'Version', value: cat.version });
+          if (cat.model) facts.push({ label: 'Model', value: cat.model });
+          const tools = parseAllowedTools(cat.allowed_tools);
+          if (tools.length > 0) facts.push({ label: 'Allowed tools', value: tools.join(', ') });
+          if (cat.path) facts.push({ label: 'Path', value: cat.path });
+          facts.push({
+            label: 'Catalog scan',
+            value: `${cat.updated_at.slice(0, 10)}${cat.reported_by ? ` · ${cat.reported_by}` : ''}`,
+          });
         }
         break;
       }

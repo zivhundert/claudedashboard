@@ -16,6 +16,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r --if-present test",
     "seed": "pnpm --filter @dash/server seed",
+    "skills:scan": "pnpm --filter @dash/server skills:scan",
     "start": "node server/dist/index.js"
   },
   "devDependencies": {

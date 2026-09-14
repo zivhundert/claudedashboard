@@ -22,6 +22,7 @@ import type {
   OverviewResponse,
   RecommendationsResponse,
   ReliabilityResponse,
+  SkillCatalogResponse,
   SkillsResponse,
   SyncJobType,
   SyncLogsResponse,
@@ -165,6 +166,12 @@ export const api = {
     request<SkillsResponse>(
       `/api/skills${qs({ from: q.from, to: q.to, teamId: q.teamId, userId: q.userId })}`,
     ),
+
+  /**
+   * Skill catalog (what each skill IS: description, source, version, tools).
+   * Range-independent — pushed by `pnpm skills:scan`, not by telemetry.
+   */
+  skillCatalog: () => request<SkillCatalogResponse>('/api/skills/catalog'),
 
   /** data-source capability matrix that gates UI features */
   capabilities: () => request<CapabilitiesResponse>('/api/capabilities'),

@@ -4,13 +4,14 @@ import { ArrowDown, ArrowUp } from 'lucide-react';
 import type {
   AgentUsageRow,
   EcosystemResponse,
+  SkillSource,
   SkillUsageRow,
   SkillsResponse,
   ToolUsageRow,
   UserSkillRow,
 } from '@dash/shared';
 import { useRangeParams } from '@/hooks/useRangeParams';
-import { useEcosystem, useOverview, useSkills } from '@/lib/queries';
+import { useEcosystem, useOverview, useSkillCatalog, useSkills } from '@/lib/queries';
 import { useChartTheme, asTipArray } from '@/lib/chartTheme';
 import { fmtCost, fmtNumber, fmtPct, fmtTokens, relativeIso } from '@/lib/format';
 import { ChartCard, ChartPage, HiddenChartChips } from '@/components/ChartCard';
@@ -28,6 +29,11 @@ import { cn } from '@/lib/utils';
 import { EntityName } from '@/components/EntityName';
 import { useEntityStore } from '@/state/entity';
 import { ModelMixChart, PluginsList, ToolUsageList, VersionDriftBars } from '@/components/EcosystemCards';
+import {
+  SkillSourceBadge,
+  useSkillCatalogIndex,
+  type SkillCatalogIndex,
+} from '@/components/SkillCatalog';
 
 /** Telemetry replaces non-allowlisted skill names with these placeholders. */
 const REDACTED_NOTE = 'name redacted by telemetry settings';
@@ -44,6 +50,8 @@ export default function OrgSkills() {
   const { from, to, teamId } = useRangeParams();
   const skillsQ = useSkills({ from, to, teamId });
   const ecosystemQ = useEcosystem({ from, to, teamId });
+  // what each skill IS — range-independent, so it rides its own cached query
+  const catalogQ = useSkillCatalog();
   // org active users for the "share of actives" KPI footer (cached from Overview)
   const overviewQ = useOverview({ from, to, teamId });
   const [drill, setDrill] = useState<BreakdownTarget | null>(null);
@@ -52,6 +60,7 @@ export default function OrgSkills() {
   const noData = !!skills && !skills.hasData;
   const eco = ecosystemQ.data;
   const orgActiveUsers = overviewQ.data?.kpis.activeUsers ?? null;
+  const catalog = useSkillCatalogIndex(catalogQ.data?.entries);
 
   return (
     <ChartPage pageId="skills">
@@ -72,6 +81,7 @@ export default function OrgSkills() {
               rows={skills?.skills ?? []}
               isLoading={skillsQ.isLoading}
               noData={noData}
+              catalog={catalog}
               onRetry={() => void skillsQ.refetch()}
             />
 
@@ -137,7 +147,7 @@ export default function OrgSkills() {
               {skillsQ.isLoading ? (
                 <TableSkeleton rows={5} cols={5} />
               ) : (
-                <PowerUsersTable rows={skills?.users ?? []} />
+                <PowerUsersTable rows={skills?.users ?? []} catalog={catalog} />
               )}
             </ChartCard>
 
@@ -149,6 +159,11 @@ export default function OrgSkills() {
                   {fmtNumber(skills.ingest.eventsIngested)} events ingested · last event{' '}
                   {relativeIso(skills.ingest.lastEventAt)}
                 </span>
+                <CatalogCoverage
+                  rows={skills.skills}
+                  catalog={catalog}
+                  lastUpdatedAt={catalogQ.data?.lastUpdatedAt ?? null}
+                />
                 <WhatsCollectedLink />
               </div>
             )}
@@ -226,6 +241,55 @@ function KpiRow({
 }
 
 // ---------------------------------------------------------------------------
+// Catalog coverage footer
+// ---------------------------------------------------------------------------
+
+/**
+ * How much of what ran is actually described. A skill with no catalog entry is
+ * a gap in the scan, not an unknown skill — say so, and say how to close it.
+ */
+function CatalogCoverage({
+  rows,
+  catalog,
+  lastUpdatedAt,
+}: {
+  rows: SkillUsageRow[];
+  catalog: SkillCatalogIndex;
+  lastUpdatedAt: string | null;
+}) {
+  const { described, describable, bySource } = useMemo(() => {
+    // redacted buckets can never match an entry, so they are not a coverage miss
+    const real = rows.filter((r) => !isRedactedSkill(r.skillName));
+    const entries = real.map((r) => catalog.get(r.skillName)).filter((e) => e !== undefined);
+    const tally = new Map<SkillSource, number>();
+    for (const e of entries) tally.set(e.source, (tally.get(e.source) ?? 0) + 1);
+    return { described: entries.length, describable: real.length, bySource: [...tally.entries()] };
+  }, [rows, catalog]);
+
+  if (catalog.size === 0) {
+    return (
+      <span>
+        No skill catalog — run <span className="font-mono text-fg">pnpm skills:scan</span> to add
+        descriptions
+      </span>
+    );
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <span>
+        {fmtNumber(described)} of {fmtNumber(describable)} skills described
+      </span>
+      {bySource.map(([source, n]) => (
+        <SkillSourceBadge key={source} source={source} className="opacity-80">
+          {n}
+        </SkillSourceBadge>
+      ))}
+      <span>· scanned {relativeIso(lastUpdatedAt)}</span>
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Top skills (toggle invocations / cost)
 // ---------------------------------------------------------------------------
 
@@ -235,19 +299,30 @@ function TopSkillsCard({
   rows,
   isLoading,
   noData,
+  catalog,
   onRetry,
 }: {
   rows: SkillUsageRow[];
   isLoading: boolean;
   noData: boolean;
+  catalog: SkillCatalogIndex;
   onRetry: () => void;
 }) {
   const [mode, setMode] = useState<SkillMode>('invocations');
   const [filter, setFilter] = useState('');
   const q = filter.trim().toLowerCase();
+  // the catalog description is searchable too — "what handles Jira?" is a more
+  // useful question than "which skill is spelled like this?"
   const filtered = useMemo(
-    () => (q ? rows.filter((r) => r.skillName.toLowerCase().includes(q)) : rows),
-    [rows, q],
+    () =>
+      q
+        ? rows.filter(
+            (r) =>
+              r.skillName.toLowerCase().includes(q) ||
+              (catalog.get(r.skillName)?.description ?? '').toLowerCase().includes(q),
+          )
+        : rows,
+    [rows, q, catalog],
   );
   return (
     <ChartCard
@@ -261,7 +336,7 @@ function TopSkillsCard({
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter skills…"
-            aria-label="Filter skills by name"
+            aria-label="Filter skills by name or description"
             className="w-32 rounded-md border border-border bg-transparent px-2 py-1 text-xs outline-none transition-colors placeholder:text-muted focus:border-accent"
           />
           <Segmented
@@ -287,7 +362,14 @@ function TopSkillsCard({
             : 'No skill invocations in this range'
       }
     >
-      {(ref) => <TopSkillsChart instanceRef={ref} rows={filtered} mode={mode} />}
+      {(ref) => (
+        <TopSkillsChart
+          instanceRef={ref}
+          rows={filtered}
+          mode={mode}
+          catalog={catalog}
+        />
+      )}
     </ChartCard>
   );
 }
@@ -296,10 +378,12 @@ function TopSkillsChart({
   instanceRef,
   rows,
   mode,
+  catalog,
 }: {
   instanceRef: ChartRef;
   rows: SkillUsageRow[];
   mode: SkillMode;
+  catalog: SkillCatalogIndex;
 }) {
   const t = useChartTheme();
   const openEntity = useEntityStore((s) => s.open);
@@ -325,11 +409,18 @@ function TopSkillsChart({
           const note = isRedactedSkill(row.skillName)
             ? `<div style="margin-top:2px;font-size:10.5px;opacity:.65">${REDACTED_NOTE}</div>`
             : '';
+          // catalog text is author-written frontmatter — escaped like the name
+          const entry = catalog.get(row.skillName);
+          const blurb = entry?.description
+            ? `<div style="margin-top:3px;max-width:320px;white-space:normal;font-size:10.5px;opacity:.8">${escapeHtml(
+                entry.description.length > 160 ? `${entry.description.slice(0, 160)}…` : entry.description,
+              )}</div>`
+            : '';
           return (
-            `${p.marker ?? ''}<b>${escapeHtml(row.skillName)}</b><br/>` +
-            `Invocations: <b>${fmtNumber(row.invocations)}</b><br/>` +
+            `${p.marker ?? ''}<b>${escapeHtml(row.skillName)}</b>` +
+            `<div style="margin-top:3px">Invocations: <b>${fmtNumber(row.invocations)}</b><br/>` +
             `Users: ${fmtNumber(row.users)}<br/>` +
-            `Cost: ${fmtCost(row.costCents)}${note}`
+            `Cost: ${fmtCost(row.costCents)}</div>${blurb}${note}`
           );
         },
       },
@@ -373,7 +464,7 @@ function TopSkillsChart({
         },
       ],
     };
-  }, [sorted, mode, t]);
+  }, [sorted, mode, t, catalog]);
   // every skill gets a row, so the card grows with the list instead of clipping it
   const height = Math.max(320, rows.length * 26 + 40);
   return (
@@ -609,7 +700,7 @@ function UserTh({
   );
 }
 
-function TopSkillChip({ skill }: { skill: string | null }) {
+function TopSkillChip({ skill, catalog }: { skill: string | null; catalog: SkillCatalogIndex }) {
   if (!skill) return <span className="text-xs text-muted">—</span>;
   const chip = (
     <span
@@ -621,10 +712,13 @@ function TopSkillChip({ skill }: { skill: string | null }) {
       {skill}
     </span>
   );
-  return isRedactedSkill(skill) ? <Tip content={REDACTED_NOTE}>{chip}</Tip> : chip;
+  if (isRedactedSkill(skill)) return <Tip content={REDACTED_NOTE}>{chip}</Tip>;
+  const entry = catalog.get(skill);
+  // a bare name in a table says nothing; the catalog description says what it does
+  return entry?.description ? <Tip content={entry.description}>{chip}</Tip> : chip;
 }
 
-function PowerUsersTable({ rows }: { rows: UserSkillRow[] }) {
+function PowerUsersTable({ rows, catalog }: { rows: UserSkillRow[]; catalog: SkillCatalogIndex }) {
   const [sort, setSort] = useState<{ key: UserSortKey; dir: 1 | -1 }>({ key: 'skillInvocations', dir: -1 });
 
   const onSort = (key: UserSortKey) =>
@@ -680,7 +774,7 @@ function PowerUsersTable({ rows }: { rows: UserSkillRow[] }) {
                 {fmtNumber(u.agentInvocations)}
               </td>
               <td className="px-2.5 py-2">
-                <TopSkillChip skill={u.topSkill} />
+                <TopSkillChip skill={u.topSkill} catalog={catalog} />
               </td>
             </tr>
           ))}

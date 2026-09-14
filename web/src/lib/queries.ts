@@ -88,6 +88,20 @@ export function useSkills(q: RangeQ & { userId?: number | undefined }, enabled =
 }
 
 /**
+ * Skill catalog — SKILL.md metadata pushed by `pnpm skills:scan`. Independent
+ * of the date range and changes only when someone re-scans, so it is cached
+ * for the session rather than refetched alongside every range change.
+ */
+export function useSkillCatalog(enabled = true) {
+  return useQuery({
+    queryKey: ['skill-catalog'],
+    queryFn: () => api.skillCatalog(),
+    staleTime: 5 * 60_000,
+    enabled,
+  });
+}
+
+/**
  * Data-source capability matrix — decided at server startup, so it never goes
  * stale within a session. Retries forever so a slow backend can't permanently
  * hide gated navigation.

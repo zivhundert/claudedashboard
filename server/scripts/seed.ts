@@ -235,6 +235,7 @@ function main(): void {
 
   // --- wipe data tables (FK-safe order) ---
   for (const table of [
+    'skill_catalog',
     'otel_skill_daily',
     'otel_skill_meta',
     'otel_agent_daily',
@@ -845,6 +846,81 @@ function main(): void {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
 
+  // Skill catalog: what `pnpm skills:scan` would have pushed for these skills.
+  // 'graphify' is deliberately absent so demo mode also shows the uncatalogued
+  // state the Skills tab prompts you to fix, and 'custom_skill' is the redacted
+  // bucket, which by definition can never have an entry.
+  const insertSkillCatalog = db.prepare(
+    `INSERT INTO skill_catalog (name, source, plugin_name, description, version, allowed_tools, model, path, reported_by, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const DEMO_CATALOG: Array<{
+    name: string;
+    source: 'personal' | 'project' | 'plugin' | 'builtin';
+    pluginName: string;
+    description: string;
+    version: string | null;
+    allowedTools: string[];
+  }> = [
+    {
+      name: 'code-review',
+      source: 'project',
+      pluginName: '',
+      description:
+        'Review the working diff for correctness bugs and reuse/simplification cleanups, then report findings ranked by severity.',
+      version: '2.1.0',
+      allowedTools: ['Read', 'Grep', 'Glob', 'Bash'],
+    },
+    {
+      name: 'verify',
+      source: 'project',
+      pluginName: '',
+      description: 'Run the test suite and typecheck for the packages touched by the current branch.',
+      version: '1.4.2',
+      allowedTools: ['Bash', 'Read'],
+    },
+    {
+      name: 'commit',
+      source: 'personal',
+      pluginName: '',
+      description: 'Stage the working tree, write a conventional-commit message from the diff, and commit.',
+      version: null,
+      allowedTools: ['Bash'],
+    },
+    {
+      name: 'deep-research',
+      source: 'plugin',
+      pluginName: 'research-kit',
+      description:
+        'Multi-source research agent: fans out web and codebase searches, then returns a cited synthesis rather than raw results.',
+      version: '0.9.4',
+      allowedTools: ['WebSearch', 'WebFetch', 'Read', 'Grep'],
+    },
+    {
+      name: 'fix-tests',
+      source: 'plugin',
+      pluginName: 'research-kit',
+      description: 'Triage failing tests, find the offending change, and apply the smallest fix that makes them pass.',
+      version: '0.9.4',
+      allowedTools: ['Bash', 'Read', 'Edit'],
+    },
+  ];
+  const seedStamp = new Date().toISOString();
+  for (const e of DEMO_CATALOG) {
+    insertSkillCatalog.run(
+      e.name,
+      e.source,
+      e.pluginName,
+      e.description,
+      e.version,
+      JSON.stringify(e.allowedTools),
+      null,
+      e.source === 'plugin' ? `~/.claude/plugins/cache/demo/${e.pluginName}/${e.version}/skills/${e.name}` : `~/.claude/skills/${e.name}`,
+      'demo-seed',
+      seedStamp,
+    );
+  }
+
   const otelUsers = seededDevs.filter((d) => d.kind !== 'none' && !d.departed).slice(0, 18);
   interface OtelProfile {
     dev: (typeof otelUsers)[number];
@@ -1246,6 +1322,7 @@ function main(): void {
     { entity: 'cost_daily rows', count: count('cost_daily') },
     { entity: 'usage_dimensions_daily rows', count: count('usage_dimensions_daily') },
     { entity: 'otel_skill_daily rows', count: count('otel_skill_daily') },
+    { entity: 'skill_catalog rows', count: count('skill_catalog') },
     { entity: 'otel_agent_daily rows', count: count('otel_agent_daily') },
     { entity: 'otel_tool_daily rows', count: count('otel_tool_daily') },
     { entity: 'otel_activity_daily rows', count: count('otel_activity_daily') },

@@ -8,7 +8,8 @@
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --external:better-sqlite3 --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
     "typecheck": "tsc --noEmit",
     "seed": "tsx scripts/seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "skills:scan": "tsx scripts/scanSkills.ts"
   },
   "dependencies": {
     "@anthropic-ai/foundry-sdk": "^0.4.6",
