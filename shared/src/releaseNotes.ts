@@ -12,13 +12,24 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    version: '1.0.7',
+    date: '2026-09-14',
+    highlights: [
+      'AI coach, reframed around you: no scores, rankings or org comparisons any more. The coach reads only your own numbers — activity, output, edit decisions per tool, cost and cache, and the skills, subagents and MCP servers you actually use (with failure rates) — and gives feedback on working with Claude Code more effectively across five areas: adoption, efficiency, quality, toolkit and delivery. It needs a range of 7 days or more.',
+      'Settings → AI coach: an on/off switch (turning it back on requires the admin password), the model’s $/M-token prices, and a usage & estimated-cost table (today / 7d / 30d / all time) fed by a ledger of every model call.',
+      'Skill catalog: run `pnpm skills:scan` on a machine with your skills installed and the Skills page gains each skill’s description, source badge (personal / project / plugin), version and allowed tools — in the filter, the bar tooltips, the top-skill chips and the detail card — plus a footer saying how much of what ran is described.',
+      'Active users are counted the same way everywhere: any Claude Code activity on a day (sessions, edits, lines, commits or PRs) counts, so the Overview number, the trend bars, adoption %, streaks and the “see who” list finally agree. The numbers go up slightly — sessions that ran past midnight used to be missed.',
+      'The selected date range, granularity and team now stay put when you move between pages instead of falling back to 30D.',
+    ],
+  },
+  {
     version: '1.0.6',
     date: '2026-09-13',
     highlights: [
-      'New: AI coach on the Personal page. For ranges of 7 days or more, the coach reads that person’s own numbers — activity, output, edit decisions per tool, cost and cache, and the skills, subagents and MCP servers they use — and writes a short summary, one or two strengths and 3–5 recommendations for working with Claude Code more effectively (adoption, efficiency, quality, toolkit, delivery). Each item cites the numbers it relied on and names a concrete Claude Code practice to try. It looks at the developer on their own terms: no scores, rankings or comparisons to the organisation.',
+      'New: AI coach on the Personal page. From your metrics it writes a short summary, one or two strengths and 3–5 recommendations, each citing the numbers it relied on and naming a concrete Claude Code practice to try.',
       'How it works: notes are generated on first view and cached per person and range for a day (regenerated only when the numbers or the prompt change); Regenerate asks the model again, rate-limited. Only numbers leave the server — never names, prompts, code or file names — and “What’s collected” states when the coach is on and which provider and model answer.',
       'Configuration: works with any Anthropic-format endpoint — a Claude deployment on Microsoft Foundry, or another model behind a proxy such as LiteLLM (e.g. GPT-5.6). Set FOUNDRY_API_KEY, FOUNDRY_BASE_URL, FOUNDRY_MODEL and AI_PROVIDER_LABEL; one check at boot reports in the banner and /api/capabilities whether the endpoint, key and model are reachable, and the card explains any misconfiguration instead of hiding.',
-      'Admin controls (Settings → AI coach): an on/off switch (turning it back on requires ADMIN_PASSWORD), the model’s $/M-token prices and a usage & estimated-cost table (today / 7d / 30d / all time), plus an editable coaching prompt behind the same password — the output format stays locked.',
+      'Admin → Settings → AI coach prompt: rewrite the coaching guidance behind an admin password; the output format stays locked and cached notes are cleared on save.',
     ],
   },
   {
