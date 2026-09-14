@@ -6,6 +6,7 @@
  */
 import type { BreakdownColumn, BreakdownDimension, BreakdownUserRow } from '@dash/shared';
 import type { Db } from '../db/connection';
+import { activeDaySql } from './activeDay';
 
 interface MetricSpec {
   key: string;
@@ -19,6 +20,8 @@ interface DimensionSpec {
   table: string;
   /** column matched against @entity; null = dimension has no entity filter */
   entityCol: string | null;
+  /** extra row filter over alias t (no parameters) */
+  rowFilter?: string;
   metrics: MetricSpec[];
 }
 
@@ -97,6 +100,8 @@ const DIMENSIONS: Record<Exclude<BreakdownDimension, 'version' | 'active-hour'>,
   'active-users': {
     table: 'usage_daily',
     entityCol: null,
+    // the SAME definition the Overview KPI and trend bars count with
+    rowFilter: activeDaySql('t'),
     metrics: [
       { key: 'sessions', label: 'Sessions', format: 'number', sql: 'SUM(t.num_sessions)' },
       { key: 'linesAdded', label: 'Lines added', format: 'number', sql: 'SUM(t.lines_added)' },
@@ -171,6 +176,7 @@ export class BreakdownRepo {
       .join(',\n                ');
     let where = 't.date BETWEEN @from AND @to';
     const params: Record<string, unknown> = { from, to };
+    if (spec.rowFilter) where += ` AND ${spec.rowFilter}`;
     if (spec.entityCol !== null) {
       where += ` AND t.${spec.entityCol} = @entity`;
       params['entity'] = entity;
@@ -200,8 +206,8 @@ export class BreakdownRepo {
   }
 
   /**
-   * Rostered people (the Overview's denominator) with no usage_daily row in
-   * range — the "not active" half of an Activity-trend bucket drill-down.
+   * Rostered people (the Overview's denominator) with no active day in range
+   * (activeDay.ts) — the "not active" half of an Activity-trend bucket drill-down.
    */
   inactiveUsers(from: string, to: string, teamId?: number): BreakdownUserRow[] {
     let where = this.rosterScoped
@@ -220,7 +226,7 @@ export class BreakdownRepo {
          WHERE ${where}
            AND NOT EXISTS (
              SELECT 1 FROM usage_daily d
-             WHERE d.user_id = u.id AND d.date BETWEEN @from AND @to
+             WHERE d.user_id = u.id AND d.date BETWEEN @from AND @to AND ${activeDaySql('d')}
            )
          ORDER BY u.name COLLATE NOCASE`,
       )
