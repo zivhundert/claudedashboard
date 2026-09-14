@@ -56,6 +56,28 @@ export interface RangeParams {
   setCompare: (emails: string[]) => void;
 }
 
+/** URL keys that describe the analysis window — carried along when moving between pages. */
+export const RANGE_SEARCH_KEYS = ['range', 'from', 'to', 'gran', 'team'] as const;
+
+/**
+ * The current range as a search string ("?range=7d&team=3", or "") for links
+ * that switch pages: without it a menu click lands on the page's default
+ * (30D), which reads as the filter "jumping back". Page-specific keys such as
+ * `compare` are deliberately left behind.
+ */
+export function useRangeSearch(): string {
+  const [searchParams] = useSearchParams();
+  return useMemo(() => {
+    const sp = new URLSearchParams();
+    for (const key of RANGE_SEARCH_KEYS) {
+      const v = searchParams.get(key);
+      if (v) sp.set(key, v);
+    }
+    const s = sp.toString();
+    return s ? `?${s}` : '';
+  }, [searchParams]);
+}
+
 /** All analytics state lives in the URL so deep links are shareable. */
 export function useRangeParams(): RangeParams {
   const [searchParams, setSearchParams] = useSearchParams();

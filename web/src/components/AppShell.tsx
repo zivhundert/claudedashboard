@@ -28,6 +28,7 @@ import { usePrefsStore } from '@/state/prefs';
 import { CommandPalette } from '@/components/CommandPalette';
 import { GuideDrawer } from '@/components/GuideDrawer';
 import { RangePicker, GranularityControl } from '@/components/RangePicker';
+import { useRangeSearch } from '@/hooks/useRangeParams';
 import { SyncPill } from '@/components/SyncPill';
 import { PersonaSwitcher } from '@/components/PersonaSwitcher';
 import { ReleaseNotesDialog } from '@/components/ReleaseNotesDialog';
@@ -79,9 +80,11 @@ const ADMIN_NAV: NavItem[] = [
 ];
 
 function SideLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+  // keep the selected range/granularity/team when switching pages
+  const search = useRangeSearch();
   const link = (
     <NavLink
-      to={item.to}
+      to={{ pathname: item.to, search }}
       end={item.end ?? false}
       className={({ isActive }) =>
         cn(
@@ -107,6 +110,7 @@ function SideLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
 export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
+  const rangeSearch = useRangeSearch();
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggle);
   const collapsed = usePrefsStore((s) => s.sidebarCollapsed);
@@ -140,7 +144,7 @@ export function AppShell() {
   }, []);
 
   const myProfile = () => {
-    if (email) navigate(`/user/${encodeURIComponent(email)}`);
+    if (email) navigate({ pathname: `/user/${encodeURIComponent(email)}`, search: rangeSearch });
     else setIdentifyOpen('developer');
   };
 

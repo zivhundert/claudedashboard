@@ -1,4 +1,5 @@
 import { utcHourRangeOfLocalDays } from '@dash/shared';
+import { activeDaySql } from './activeDay';
 import type { Db } from '../db/connection';
 import { orgTimezone } from '../util/time';
 
@@ -217,8 +218,8 @@ export class UsageRepo {
            COALESCE(SUM(d.pull_requests), 0) AS pull_requests,
            COALESCE(SUM(${ACCEPTED_SUM}), 0) AS accepted,
            COALESCE(SUM(${REJECTED_SUM}), 0) AS rejected,
-           COUNT(DISTINCT CASE WHEN d.num_sessions > 0 THEN d.user_id END) AS active_users,
-           COUNT(DISTINCT CASE WHEN d.num_sessions > 0 AND u.in_roster = 1 THEN d.user_id END) AS active_rostered
+           COUNT(DISTINCT CASE WHEN ${activeDaySql('d')} THEN d.user_id END) AS active_users,
+           COUNT(DISTINCT CASE WHEN ${activeDaySql('d')} AND u.in_roster = 1 THEN d.user_id END) AS active_rostered
          FROM usage_daily d
          JOIN users u ON u.id = d.user_id
          WHERE d.date BETWEEN @from AND @to AND u.actor_type = 'user' ${teamFilter}`,
@@ -258,7 +259,7 @@ export class UsageRepo {
         `SELECT
            ${bucket} AS date,
            COALESCE(SUM(d.num_sessions), 0) AS sessions,
-           COUNT(DISTINCT CASE WHEN d.num_sessions > 0 THEN d.user_id END) AS active_users,
+           COUNT(DISTINCT CASE WHEN ${activeDaySql('d')} THEN d.user_id END) AS active_users,
            COALESCE(SUM(d.lines_added), 0) AS lines_added,
            COALESCE(SUM(d.lines_removed), 0) AS lines_removed,
            COALESCE(SUM(d.commits), 0) AS commits,
@@ -349,7 +350,7 @@ export class UsageRepo {
         `SELECT
            d.user_id AS user_id,
            COALESCE(SUM(d.num_sessions), 0) AS sessions,
-           COUNT(DISTINCT d.date) AS active_days,
+           COUNT(DISTINCT CASE WHEN ${activeDaySql('d')} THEN d.date END) AS active_days,
            COALESCE(SUM(d.lines_added), 0) AS lines_added,
            COALESCE(SUM(d.lines_removed), 0) AS lines_removed,
            COALESCE(SUM(d.commits), 0) AS commits,
@@ -411,7 +412,7 @@ export class UsageRepo {
     return this.db
       .prepare(
         `SELECT
-           COUNT(DISTINCT CASE WHEN d.num_sessions > 0 THEN d.user_id END) AS activeUsers,
+           COUNT(DISTINCT CASE WHEN ${activeDaySql('d')} THEN d.user_id END) AS activeUsers,
            COUNT(DISTINCT CASE WHEN d.pull_requests > 0 THEN d.user_id END) AS usersWithPrs,
            COUNT(DISTINCT CASE WHEN d.commits > 0 THEN d.user_id END) AS usersWithCommits
          FROM usage_daily d
@@ -587,14 +588,14 @@ export class UsageRepo {
   // Adoption (rolling actives + org-wide calendar)
   // -------------------------------------------------------------------------
 
-  /** Distinct (user, date) pairs where a USER actor had sessions that day. */
+  /** Distinct (user, date) pairs where a USER actor was active that day (see activeDay.ts). */
   userActiveDays(from: string, to: string): UserDateRow[] {
     return this.db
       .prepare(
         `SELECT DISTINCT d.user_id AS user_id, d.date AS date
          FROM usage_daily d
          JOIN users u ON u.id = d.user_id
-         WHERE d.date BETWEEN ? AND ? AND u.actor_type = 'user' AND d.num_sessions > 0`,
+         WHERE d.date BETWEEN ? AND ? AND u.actor_type = 'user' AND ${activeDaySql('d')}`,
       )
       .all(from, to) as UserDateRow[];
   }
