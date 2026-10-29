@@ -564,9 +564,9 @@ export const METRIC_GUIDE: Record<
   },
   pluginUsage: {
     name: 'Plugin usage',
-    formula: 'skill_activated events per plugin (sum of its skills), plus plugin load events',
+    formula: 'distinct people per plugin across its skill runs, MCP tool calls and agent runs; calls = their sum',
     explanation:
-      'Plugins ranked by how often people actually run their skills — loading a plugin costs nothing, using it is the signal. A skill counts toward a plugin when telemetry names the plugin, or when its "plugin:" prefix matches a plugin Claude Code reported loading.',
+      'Plugins ranked by how many people actually use them — through a skill, an MCP tool or an agent. Loading a plugin costs nothing; using it is the signal. A skill or agent counts toward a plugin when telemetry names the plugin, or when its "plugin:" prefix matches a plugin Claude Code reported loading; plugin MCP servers arrive as "plugin_<plugin>_<server>".',
   },
   versionDrift: {
     name: 'Version drift',

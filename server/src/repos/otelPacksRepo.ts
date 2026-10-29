@@ -127,6 +127,20 @@ export interface PluginSkillUserRow {
   cost_cents: number;
 }
 
+/** One (MCP server, user) cell in range — only servers named the way plugin MCP servers are. */
+export interface PluginMcpUserRow {
+  server_name: string;
+  user_id: number;
+  tool_calls: number;
+}
+
+/** One (agent type, user) cell in range — only 'prefix:agent' names, the shape plugin agents have. */
+export interface PluginAgentUserRow {
+  subagent_type: string;
+  user_id: number;
+  invocations: number;
+}
+
 export interface AppVersionRow {
   app_version: string;
   users: number;
@@ -425,6 +439,37 @@ export class OtelPacksRepo {
          GROUP BY t.skill_name, t.user_id`,
       )
       .all(scopeParams(from, to, scope)) as PluginSkillUserRow[];
+  }
+
+  /** MCP tool calls per (plugin-named server, user) in range; connection-only rows are left out. */
+  pluginMcpUsers(from: string, to: string, scope: OtelScope = {}): PluginMcpUserRow[] {
+    const { fromSql, whereSql } = scopeSql('otel_mcp_daily', scope);
+    return this.db
+      .prepare(
+        `SELECT t.server_name AS server_name,
+                t.user_id AS user_id,
+                COALESCE(SUM(t.tool_calls), 0) AS tool_calls
+         FROM ${fromSql}
+         WHERE ${whereSql} AND t.tool_calls > 0
+           AND (t.server_name LIKE 'plugin\\_%' ESCAPE '\\' OR t.server_name LIKE 'plugin:%')
+         GROUP BY t.server_name, t.user_id`,
+      )
+      .all(scopeParams(from, to, scope)) as PluginMcpUserRow[];
+  }
+
+  /** Agent runs per ('prefix:agent' type, user) in range; the route keeps prefixes that are plugins. */
+  pluginAgentUsers(from: string, to: string, scope: OtelScope = {}): PluginAgentUserRow[] {
+    const { fromSql, whereSql } = scopeSql('otel_agent_daily', scope);
+    return this.db
+      .prepare(
+        `SELECT t.subagent_type AS subagent_type,
+                t.user_id AS user_id,
+                COALESCE(SUM(t.invocations), 0) AS invocations
+         FROM ${fromSql}
+         WHERE ${whereSql} AND t.invocations > 0 AND instr(t.subagent_type, ':') > 1
+         GROUP BY t.subagent_type, t.user_id`,
+      )
+      .all(scopeParams(from, to, scope)) as PluginAgentUserRow[];
   }
 
   /** Every plugin name Claude Code ever reported loading or installing (range-independent). */

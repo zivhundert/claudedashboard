@@ -17,7 +17,7 @@ import type {
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../context';
-import type { PluginRow, PluginSkillUserRow } from '../repos/otelPacksRepo';
+import type { PluginAgentUserRow, PluginMcpUserRow, PluginRow, PluginSkillUserRow } from '../repos/otelPacksRepo';
 import type { OtelScope } from '../repos/otelRepo';
 import { avgMs, errorRate, mean, median } from '../services/packMath';
 import { hourIsoOf } from '../util/time';
@@ -58,45 +58,133 @@ function pluginOf(row: PluginSkillUserRow, known: Set<string>): string | null {
   return known.has(prefix) ? prefix : null;
 }
 
-/** Plugins ranked by their skills' runs; loaded-but-unused ones trail, by loads. */
-export function rankPlugins(cells: PluginSkillUserRow[], loads: PluginRow[], known: Set<string>): PluginUsageRow[] {
-  const all = new Set(known);
-  for (const c of cells) if (c.meta_plugin) all.add(c.meta_plugin);
+/**
+ * The plugin an MCP server belongs to. Connection events name it
+ * 'plugin:<plugin>:<server>'; tool calls 'plugin_<plugin>_<server>', where a
+ * plugin name may itself hold '_' or share a prefix with another plugin — so
+ * the longest known plugin wins, and an unknown one falls back to the first
+ * '_'-separated segment.
+ */
+export function mcpPluginOf(server: string, known: Set<string>): string | null {
+  if (server.startsWith('plugin:')) {
+    const name = server.slice('plugin:'.length).split(':')[0];
+    return name || null;
+  }
+  if (!server.startsWith('plugin_')) return null;
+  let best: string | null = null;
+  for (const p of known) {
+    if (server.startsWith(`plugin_${p}_`) && (!best || p.length > best.length)) best = p;
+  }
+  if (best) return best;
+  const rest = server.slice('plugin_'.length);
+  const sep = rest.indexOf('_');
+  return sep > 0 ? rest.slice(0, sep) : null;
+}
 
+/** The plugin an agent belongs to: its 'prefix:' when that prefix is a known plugin. */
+function agentPluginOf(type: string, known: Set<string>): string | null {
+  const sep = type.indexOf(':');
+  if (sep <= 0) return null;
+  const prefix = type.slice(0, sep);
+  return known.has(prefix) ? prefix : null;
+}
+
+interface PluginInputs {
+  skills: PluginSkillUserRow[];
+  mcp: PluginMcpUserRow[];
+  agents: PluginAgentUserRow[];
+  loads: PluginRow[];
+  known: Set<string>;
+}
+
+/**
+ * Plugins ranked by the people who used them — through a skill, an MCP tool
+ * or an agent — then by calls. Loaded-but-unused ones trail, by loads.
+ */
+export function rankPlugins({ skills, mcp, agents, loads, known }: PluginInputs): {
+  plugins: PluginUsageRow[];
+  users: number;
+} {
+  const all = new Set(known);
+  for (const c of skills) if (c.meta_plugin) all.add(c.meta_plugin);
+
+  interface Part {
+    count: number;
+    costCents: number;
+    users: Set<number>;
+  }
   interface Acc {
     row: PluginUsageRow;
     users: Set<number>;
-    skills: Map<string, { invocations: number; costCents: number; users: Set<number> }>;
+    skills: Map<string, Part>;
+    mcp: Map<string, Part>;
+    agents: Map<string, Part>;
   }
   const byPlugin = new Map<string, Acc>();
+  const everyone = new Set<number>();
   const acc = (name: string): Acc => {
     let a = byPlugin.get(name);
     if (!a) {
       a = {
-        row: { pluginName: name, invocations: 0, users: 0, costCents: 0, loads: 0, installs: 0, loadUsers: 0, skills: [] },
+        row: {
+          pluginName: name,
+          users: 0,
+          calls: 0,
+          invocations: 0,
+          mcpCalls: 0,
+          agentRuns: 0,
+          costCents: 0,
+          loads: 0,
+          installs: 0,
+          loadUsers: 0,
+          skills: [],
+          mcpServers: [],
+          agents: [],
+        },
         users: new Set(),
         skills: new Map(),
+        mcp: new Map(),
+        agents: new Map(),
       };
       byPlugin.set(name, a);
     }
     return a;
   };
+  const add = (parts: Map<string, Part>, key: string, count: number, costCents: number, userId: number) => {
+    let p = parts.get(key);
+    if (!p) {
+      p = { count: 0, costCents: 0, users: new Set() };
+      parts.set(key, p);
+    }
+    p.count += count;
+    p.costCents += costCents;
+    p.users.add(userId);
+  };
 
-  for (const c of cells) {
+  for (const c of skills) {
     const plugin = pluginOf(c, all);
     if (!plugin) continue;
     const a = acc(plugin);
     a.row.invocations += c.invocations;
     a.row.costCents += c.cost_cents;
     a.users.add(c.user_id);
-    let s = a.skills.get(c.skill_name);
-    if (!s) {
-      s = { invocations: 0, costCents: 0, users: new Set() };
-      a.skills.set(c.skill_name, s);
-    }
-    s.invocations += c.invocations;
-    s.costCents += c.cost_cents;
-    s.users.add(c.user_id);
+    add(a.skills, c.skill_name, c.invocations, c.cost_cents, c.user_id);
+  }
+  for (const c of mcp) {
+    const plugin = mcpPluginOf(c.server_name, all);
+    if (!plugin) continue;
+    const a = acc(plugin);
+    a.row.mcpCalls += c.tool_calls;
+    a.users.add(c.user_id);
+    add(a.mcp, c.server_name, c.tool_calls, 0, c.user_id);
+  }
+  for (const c of agents) {
+    const plugin = agentPluginOf(c.subagent_type, all);
+    if (!plugin) continue;
+    const a = acc(plugin);
+    a.row.agentRuns += c.invocations;
+    a.users.add(c.user_id);
+    add(a.agents, c.subagent_type, c.invocations, 0, c.user_id);
   }
   for (const l of loads) {
     const a = acc(l.plugin_name);
@@ -105,17 +193,28 @@ export function rankPlugins(cells: PluginSkillUserRow[], loads: PluginRow[], kno
     a.row.loadUsers = l.users;
   }
 
-  return [...byPlugin.values()]
-    .map(({ row, users, skills }) => ({
-      ...row,
-      users: users.size,
-      skills: [...skills.entries()]
-        .map(([skillName, s]) => ({ skillName, invocations: s.invocations, users: s.users.size, costCents: s.costCents }))
-        .sort((x, y) => y.invocations - x.invocations || x.skillName.localeCompare(y.skillName)),
-    }))
+  const byCount = <T extends { count: number; name: string }>(x: T, y: T) =>
+    y.count - x.count || x.name.localeCompare(y.name);
+  const list = (parts: Map<string, Part>) =>
+    [...parts.entries()].map(([name, p]) => ({ name, count: p.count, costCents: p.costCents, users: p.users.size })).sort(byCount);
+
+  const plugins = [...byPlugin.values()]
+    .map(({ row, users, skills: s, mcp: m, agents: g }) => {
+      for (const id of users) everyone.add(id);
+      return {
+        ...row,
+        users: users.size,
+        calls: row.invocations + row.mcpCalls + row.agentRuns,
+        skills: list(s).map((x) => ({ skillName: x.name, invocations: x.count, users: x.users, costCents: x.costCents })),
+        mcpServers: list(m).map((x) => ({ serverName: x.name, calls: x.count, users: x.users })),
+        agents: list(g).map((x) => ({ agentType: x.name, runs: x.count, users: x.users })),
+      };
+    })
     .sort(
-      (x, y) => y.invocations - x.invocations || y.loads - x.loads || x.pluginName.localeCompare(y.pluginName),
+      (x, y) =>
+        y.users - x.users || y.calls - x.calls || y.loads - x.loads || x.pluginName.localeCompare(y.pluginName),
     );
+  return { plugins, users: everyone.size };
 }
 
 /** '2.10.1' before '2.9.3' — numeric per dot-segment, newest first. */
@@ -311,8 +410,14 @@ export function registerTelemetryPackRoutes(app: FastifyInstance, ctx: AppContex
   app.get('/api/telemetry/plugins', async (req): Promise<PluginsResponse> => {
     const { from, to, scope } = parsePacksQuery(req.query);
     const repo = packs();
-    const plugins = rankPlugins(repo.pluginSkillUsers(from, to, scope), repo.plugins(from, to, scope), repo.knownPluginNames());
-    return { range: { from, to }, hasData: plugins.length > 0, plugins };
+    const { plugins, users } = rankPlugins({
+      skills: repo.pluginSkillUsers(from, to, scope),
+      mcp: repo.pluginMcpUsers(from, to, scope),
+      agents: repo.pluginAgentUsers(from, to, scope),
+      loads: repo.plugins(from, to, scope),
+      known: repo.knownPluginNames(),
+    });
+    return { range: { from, to }, hasData: plugins.length > 0, users, plugins };
   });
 
   app.get('/api/telemetry/ecosystem', async (req): Promise<EcosystemResponse> => {

@@ -46,6 +46,24 @@ function load(db: Db, date: string, userId: number, pluginName: string, loads: n
   );
 }
 
+function mcp(db: Db, date: string, userId: number, server: string, calls: number): void {
+  db.prepare(`INSERT INTO otel_mcp_daily (date, user_id, server_name, tool_calls) VALUES (?, ?, ?, ?)`).run(
+    date,
+    userId,
+    server,
+    calls,
+  );
+}
+
+function agent(db: Db, date: string, userId: number, type: string, runs: number): void {
+  db.prepare(`INSERT INTO otel_agent_daily (date, user_id, subagent_type, invocations) VALUES (?, ?, ?, ?)`).run(
+    date,
+    userId,
+    type,
+    runs,
+  );
+}
+
 let app: FastifyInstance | null = null;
 afterEach(async () => {
   await app?.close();
@@ -69,7 +87,7 @@ async function get(qs = RANGE): Promise<PluginsResponse> {
 }
 
 describe('GET /api/telemetry/plugins', () => {
-  it('ranks plugins by the sum of their skills, with a per-skill breakdown', async () => {
+  it('ranks plugins by people, with a per-skill breakdown', async () => {
     const db = build();
     const a = addUser(db, 'a@x.com');
     const b = addUser(db, 'b@x.com');
@@ -79,7 +97,7 @@ describe('GET /api/telemetry/plugins', () => {
     skill(db, '2026-10-02', a, 'superpowers:brainstorming', 3, 10);
     skill(db, '2026-10-03', b, 'superpowers:brainstorming', 5, 20);
     skill(db, '2026-10-03', a, 'superpowers:writing-plans', 4, 5);
-    // atlassian: one skill, 20 runs by one person — ranks first on runs
+    // atlassian: one skill, 20 runs by one person — more runs, fewer people → second
     meta(db, 'atlassian:jira', 'atlassian');
     skill(db, '2026-10-04', b, 'atlassian:jira', 20, 1);
     load(db, '2026-10-02', a, 'superpowers', 7, 1);
@@ -87,9 +105,9 @@ describe('GET /api/telemetry/plugins', () => {
 
     const body = await get();
     expect(body.hasData).toBe(true);
-    expect(body.plugins.map((p) => p.pluginName)).toEqual(['atlassian', 'superpowers']);
-    const sp = body.plugins[1]!;
-    expect(sp).toMatchObject({ invocations: 12, users: 2, costCents: 35, loads: 9, installs: 1, loadUsers: 2 });
+    expect(body.plugins.map((p) => p.pluginName)).toEqual(['superpowers', 'atlassian']);
+    const sp = body.plugins[0]!;
+    expect(sp).toMatchObject({ invocations: 12, calls: 12, users: 2, costCents: 35, loads: 9, installs: 1, loadUsers: 2 });
     expect(sp.skills).toEqual([
       { skillName: 'superpowers:brainstorming', invocations: 8, users: 2, costCents: 30 },
       { skillName: 'superpowers:writing-plans', invocations: 4, users: 1, costCents: 5 },
@@ -140,6 +158,47 @@ describe('GET /api/telemetry/plugins', () => {
 
     const body = await get(`${RANGE}&teamId=${team}`);
     expect(body.plugins[0]).toMatchObject({ pluginName: 'superpowers', invocations: 2, users: 1 });
+  });
+
+  it('counts MCP tool calls and agent runs toward their plugin, people across all three', async () => {
+    const db = build();
+    const a = addUser(db, 'a@x.com');
+    const b = addUser(db, 'b@x.com');
+    const c = addUser(db, 'c@x.com');
+    load(db, '2026-10-01', a, 'atlassian', 1);
+    load(db, '2026-10-01', a, 'agentic-media-stack', 1);
+    load(db, '2026-10-01', a, 'media', 1); // 'plugin_media_kit_x' could be media's server 'kit_x' …
+    load(db, '2026-10-01', a, 'media_kit', 1); // … but the longest known plugin wins
+    load(db, '2026-10-01', a, 'caveman', 1);
+    meta(db, 'atlassian:jira', 'atlassian');
+    skill(db, '2026-10-02', a, 'atlassian:jira', 2);
+    mcp(db, '2026-10-02', a, 'plugin_atlassian_bitbucket', 40); // same person as the skill run
+    mcp(db, '2026-10-02', b, 'plugin_atlassian_bitbucket', 10);
+    mcp(db, '2026-10-02', b, 'plugin_atlassian_atlassian', 5);
+    mcp(db, '2026-10-02', c, 'plugin:atlassian:bitbucket', 0); // connection-only row → nobody used it
+    mcp(db, '2026-10-02', a, 'plugin_agentic-media-stack_firecrawl', 7);
+    mcp(db, '2026-10-02', a, 'plugin_media_kit_x', 2);
+    mcp(db, '2026-10-02', a, 'bitbucket', 99); // a non-plugin MCP server
+    agent(db, '2026-10-02', a, 'caveman:cavecrew-investigator', 3);
+    agent(db, '2026-10-02', c, 'caveman:cavecrew-investigator', 1);
+    agent(db, '2026-10-02', c, 'general-purpose', 50); // built-in agent, no plugin
+
+    const body = await get();
+    const at = body.plugins[0]!;
+    expect(at).toMatchObject({ pluginName: 'atlassian', users: 2, calls: 57, invocations: 2, mcpCalls: 55, agentRuns: 0 });
+    expect(at.mcpServers).toEqual([
+      { serverName: 'plugin_atlassian_bitbucket', calls: 50, users: 2 },
+      { serverName: 'plugin_atlassian_atlassian', calls: 5, users: 1 },
+    ]);
+    expect(body.plugins.map((p) => [p.pluginName, p.users, p.calls])).toEqual([
+      ['atlassian', 2, 57],
+      ['caveman', 2, 4],
+      ['agentic-media-stack', 1, 7],
+      ['media_kit', 1, 2],
+      ['media', 0, 0],
+    ]);
+    expect(body.plugins[1]!.agents).toEqual([{ agentType: 'caveman:cavecrew-investigator', runs: 4, users: 2 }]);
+    expect(body.users).toBe(3);
   });
 
   it('reports hasData:false on an empty range', async () => {

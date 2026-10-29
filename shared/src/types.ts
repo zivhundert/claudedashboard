@@ -842,26 +842,51 @@ export interface PluginSkillUsageRow {
   costCents: number;
 }
 
+/** One of a plugin's MCP servers — telemetry names them 'plugin_<plugin>_<server>'. */
+export interface PluginMcpUsageRow {
+  serverName: string;
+  calls: number;
+  users: number;
+}
+
+/** One of a plugin's agents — telemetry names them '<plugin>:<agent>'. */
+export interface PluginAgentUsageRow {
+  agentType: string;
+  runs: number;
+  users: number;
+}
+
 export interface PluginUsageRow {
   pluginName: string;
-  /** sum of its skills' invocations — the ranking metric */
-  invocations: number;
-  /** distinct people who ran at least one of its skills */
+  /** distinct people who ran one of its skills, called one of its MCP tools or ran one of its agents — the ranking metric */
   users: number;
+  /** skill runs + MCP tool calls + agent runs */
+  calls: number;
+  /** skill runs */
+  invocations: number;
+  mcpCalls: number;
+  agentRuns: number;
+  /** API cost attributed to its skills (MCP cost overlaps skill cost, so it is not added) */
   costCents: number;
-  /** sessions that loaded the plugin (plugin_loaded), whether or not a skill ran */
+  /** sessions that loaded the plugin (plugin_loaded), whether or not it was used */
   loads: number;
   installs: number;
   /** distinct people who loaded it */
   loadUsers: number;
   /** most-invoked first */
   skills: PluginSkillUsageRow[];
+  /** most-called first */
+  mcpServers: PluginMcpUsageRow[];
+  /** most-run first */
+  agents: PluginAgentUsageRow[];
 }
 
 export interface PluginsResponse {
   range: DateRange;
   hasData: boolean;
-  /** most-invoked first; plugins loaded but never used come last (invocations 0) */
+  /** distinct people who used any plugin in range */
+  users: number;
+  /** most people first, then most calls; plugins loaded but never used come last (users 0) */
   plugins: PluginUsageRow[];
 }
 
