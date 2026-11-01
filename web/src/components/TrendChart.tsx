@@ -21,7 +21,7 @@ export interface AggPoint {
 
 /**
  * The server buckets `/api/overview` points by `gran` (bucket-start dates,
- * Sunday weeks) with correct distinct activeUsers per bucket — use points
+ * weeks starting on WEEK_START) with correct distinct activeUsers per bucket — use points
  * as-is; no client-side re-aggregation. `bucketKey` only normalizes the
  * bucket label (e.g. '2026-07-01' → '2026-07' for months).
  */

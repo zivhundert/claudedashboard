@@ -36,7 +36,7 @@ import { ReleaseNotesDialog } from '@/components/ReleaseNotesDialog';
 import { EntityDetailDrawer } from '@/components/EntityDetailDrawer';
 import { Toaster } from '@/components/Toaster';
 import { Tip } from '@/components/ui';
-import { displayZone, setDisplayZone } from '@/lib/time';
+import { displayWeekStart, displayWorkweek, displayZone, setCalendar, setDisplayZone } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -130,9 +130,13 @@ export function AppShell() {
   // comparison in the UI has to agree with it. Set DURING render, not in an
   // effect: the zone is a module global, so an effect would leave the first
   // render (and anything it memoized) on the fallback zone.
-  const serverZone = useSettings().data?.displayTimezone;
-  setDisplayZone(serverZone);
+  const settings = useSettings().data;
+  setDisplayZone(settings?.displayTimezone);
   const zone = displayZone();
+  // same for the org calendar (WORKWEEK, WEEK_START): week buckets, heatmap
+  // row order and the calendar's first day all read it
+  setCalendar(settings?.workweek, settings?.weekStart);
+  const calendarKey = `${[...displayWorkweek()].join(',')}/${displayWeekStart()}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -274,10 +278,11 @@ export function AppShell() {
           </Tip>
         </header>
 
-        {/* keyed on the zone so the subtree re-derives when it arrives — memos
-            that don't depend on it would otherwise keep the fallback's dates */}
+        {/* keyed on the zone and calendar so the subtree re-derives when they
+            arrive — memos that don't depend on them would otherwise keep the
+            fallback's dates and weeks */}
         <main className="mx-auto w-full max-w-screen-2xl flex-1 p-4">
-          <Outlet key={zone} />
+          <Outlet key={`${zone}|${calendarKey}`} />
         </main>
       </div>
 

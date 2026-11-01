@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowDown, ArrowUp, GitCompareArrows } from 'lucide-react';
-import { GUARDS, SEGMENT_ORDER, type LeaderboardEntry } from '@dash/shared';
+import { GUARDS, SEGMENT_ORDER, formatWorkweek, type LeaderboardEntry } from '@dash/shared';
 import { Avatar } from '@/components/Avatar';
 import { CountryFlag } from '@/components/CountryFlag';
 import { SegmentChip } from '@/components/SegmentChip';
@@ -12,6 +12,7 @@ import { Sparkline } from '@/components/Sparkline';
 import { UserHoverCard, profilePath } from '@/components/UserHoverCard';
 import { Button } from '@/components/ui';
 import { fmtCost, fmtNumber, fmtPct, fmtSigned, relativeDate, daysSince } from '@/lib/format';
+import { displayWeekStart, displayWorkweek } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 type SortKey =
@@ -282,7 +283,7 @@ export function MemberTable({
                     {fmtNumber(e.metrics.sessions)}
                     <span
                       className="text-muted"
-                      title="Active days (incl. weekends) / Sun–Thu workdays"
+                      title={`Active days (incl. weekends) / ${formatWorkweek(displayWorkweek(), displayWeekStart())} workdays`}
                     >
                       {' '}
                       · {e.metrics.activeDays}/{e.metrics.workdays}d

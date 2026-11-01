@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, RotateCcw, Save, Sparkles } from 'lucide-react';
-import { DEFAULT_SETTINGS, type AppSettings } from '@dash/shared';
+import { DEFAULT_SETTINGS, formatWorkweek, type AppSettings } from '@dash/shared';
 import { useCapabilities, useCoachUsage, useSaveSettings, useSettings } from '@/lib/queries';
 import { ApiError } from '@/lib/api';
 import { fmtTokens, relativeDateTime } from '@/lib/format';
@@ -86,6 +86,14 @@ export default function AdminSettings() {
         >
           <input value={form.displayTimezone} readOnly disabled className={inputCls} />
         </Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Work week" hint="Set by WORKWEEK on the server — the days scoring targets count as workdays.">
+            <input value={formatWorkweek(new Set(form.workweek), form.weekStart)} readOnly disabled className={inputCls} />
+          </Field>
+          <Field label="Week starts on" hint="Set by WEEK_START on the server — where weekly buckets begin.">
+            <input value={form.weekStart === 1 ? 'Monday' : 'Sunday'} readOnly disabled className={inputCls} />
+          </Field>
+        </div>
 
         <h2 className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted">
           Business value
