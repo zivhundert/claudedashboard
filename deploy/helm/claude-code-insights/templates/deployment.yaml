@@ -78,6 +78,18 @@ spec:
               value: {{ .Values.dataSource | quote }}
             - name: PRIVACY_MODE
               value: {{ .Values.privacyMode | quote }}
+            {{- with .Values.config.orgTimezone }}
+            - name: ORG_TIMEZONE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.workweek }}
+            - name: WORKWEEK
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.weekStart }}
+            - name: WEEK_START
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.config.syncCron }}
             - name: SYNC_CRON
               value: {{ . | quote }}

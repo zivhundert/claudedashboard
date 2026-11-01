@@ -47,9 +47,21 @@ privacyMode: "balanced"
 # App configuration (non-secret env). Empty string = use the app default.
 # ----------------------------------------------------------------------------
 config:
+  # --- Org calendar ---
+  # If you already set ORG_TIMEZONE / WORKWEEK / WEEK_START through extraEnv,
+  # leave these empty — setting both renders the variable twice in the pod env.
+  # IANA zone the daily buckets are keyed by (default "Asia/Jerusalem").
+  orgTimezone: ""
+  # Days scores count as workdays. Only two presets, sun-thu (default) and
+  # mon-fri; any other week is a list of days such as "sun,mon,tue,wed,thu,fri"
+  # or numbers "0,1,2,3,4,5" (0 = Sunday). With --set, escape the commas:
+  #   --set-string 'config.workweek=mon\,tue\,wed\,thu\,fri'
+  workweek: ""
+  # First day of weekly charts: sun | mon (default "sun").
+  weekStart: ""
   # Nightly full-sync cron, evaluated in syncTz (default "0 5 * * *").
   syncCron: ""
-  # Timezone for syncCron (default "Asia/Jerusalem").
+  # Timezone for syncCron (default: orgTimezone, else "Asia/Jerusalem").
   syncTz: ""
   # Refresh the current UTC day every N minutes; 0 disables (default 60).
   intradaySyncMinutes: ""
