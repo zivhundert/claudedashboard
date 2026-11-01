@@ -235,6 +235,8 @@ function main(): void {
 
   // --- wipe data tables (FK-safe order) ---
   for (const table of [
+    'ai_recommendations', // references users — must go before the users wipe
+    'ai_generation_log',
     'skill_catalog',
     'otel_skill_daily',
     'otel_skill_meta',
