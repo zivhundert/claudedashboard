@@ -822,7 +822,7 @@ function main(): void {
   );
   // What each seeded skill IS (mirrors otel_skill_meta learned from skill_activated attrs)
   const SKILL_META: Record<string, [source: string, kind: string, plugin: string | null, marketplace: string | null]> = {
-    'code-review': ['plugin', 'skill', 'fde', 'thetaray-plugins'],
+    'code-review': ['plugin', 'skill', 'fde', 'acme-plugins'],
     verify: ['project', 'skill', null, null],
     commit: ['bundled', 'skill', null, null],
     'deep-research': ['plugin', 'skill', 'anthropic-skills', 'claude-plugins-official'],

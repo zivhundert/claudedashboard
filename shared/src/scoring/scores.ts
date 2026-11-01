@@ -193,7 +193,7 @@ export function computeAxes(i: ScoringInput, t: ScoreTargets, cov: ImpactCoverag
     0.2 * score(toolEvents(i), t.perWorkday.toolEvents * wd);
 
   // A git-derived term only carries weight where the org can actually produce
-  // it (PR counting is GitHub-only; ThetaRay-style Bitbucket orgs sit at ~0).
+  // it (PR counting is GitHub-only; Bitbucket/GitLab orgs sit at ~0).
   // Coverage is the trailing-90d share of active users with a nonzero value —
   // below COVERAGE_MIN the term's weight redistributes proportionally over
   // the kept terms. Lines is the always-present fallback.
