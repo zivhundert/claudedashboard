@@ -1,5 +1,11 @@
 /** UTC + org-local time helpers used by scoring, sync and the seeder. */
-import { DEFAULT_ORG_TIMEZONE, localDateOf } from '@dash/shared';
+import {
+  DEFAULT_ORG_TIMEZONE,
+  DEFAULT_WEEK_START,
+  DEFAULT_WORKWEEK,
+  localDateOf,
+  type WeekStart,
+} from '@dash/shared';
 
 export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
@@ -18,6 +24,27 @@ export function configureOrgTimezone(tz: string): void {
 
 export function orgTimezone(): string {
   return resolvedOrgTimezone;
+}
+
+/**
+ * The org calendar (WORKWEEK, WEEK_START), set ONCE at boot alongside the zone
+ * and read the same way; defaults to Sun–Thu weeks starting Sunday for anyone
+ * who never calls it.
+ */
+let resolvedWorkweek: ReadonlySet<number> = DEFAULT_WORKWEEK;
+let resolvedWeekStart: WeekStart = DEFAULT_WEEK_START;
+
+export function configureCalendar(cal: { workweek: readonly number[]; weekStart: WeekStart }): void {
+  resolvedWorkweek = new Set(cal.workweek);
+  resolvedWeekStart = cal.weekStart;
+}
+
+export function orgWorkweek(): ReadonlySet<number> {
+  return resolvedWorkweek;
+}
+
+export function orgWeekStart(): WeekStart {
+  return resolvedWeekStart;
 }
 
 /**

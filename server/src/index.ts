@@ -15,7 +15,7 @@ import { SyncManager, type SyncPlan } from './sync/manager';
 import { startScheduler } from './sync/schedule';
 import { TelemetrySyncPlan } from './sync/telemetryPlan';
 import { APP_VERSION } from './version';
-import { configureOrgTimezone } from './util/time';
+import { configureCalendar, configureOrgTimezone } from './util/time';
 
 /** One plan per data source; demo has none (no scheduler, no API calls). */
 function createSyncPlan(env: Env, repos: Repos, logBus: SyncLogBus): SyncPlan | null {
@@ -53,6 +53,7 @@ async function main(): Promise<void> {
   const env = loadEnv();
   // before any repo/route touches a date key
   configureOrgTimezone(env.orgTimezone);
+  configureCalendar(env);
 
   const db = openDb(env.dbPath);
   migrate(db);

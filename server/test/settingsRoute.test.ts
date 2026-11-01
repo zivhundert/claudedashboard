@@ -1,6 +1,8 @@
 /**
  * The AI coach kill switch: anyone may turn it OFF, turning it back ON needs
- * the admin password (x-admin-password). Settings storage is an in-memory stub.
+ * the admin password (x-admin-password). Plus the env-owned fields (zone, work
+ * week, week start): served from env, never stored. Settings storage is an
+ * in-memory stub.
  */
 import Fastify, { type FastifyInstance } from 'fastify';
 import { DEFAULT_SETTINGS, type AppSettings } from '@dash/shared';
@@ -17,7 +19,10 @@ function buildApp(opts: { adminPassword: string | null; stored?: Partial<AppSett
       return current;
     },
   };
-  const ctx = { env: { adminPassword: opts.adminPassword, orgTimezone: 'UTC' }, repos: { settings } } as unknown as AppContext;
+  const ctx = {
+    env: { adminPassword: opts.adminPassword, orgTimezone: 'UTC', workweek: [1, 2, 3, 4, 5], weekStart: 1 },
+    repos: { settings },
+  } as unknown as AppContext;
   const app = Fastify();
   registerSettingsRoutes(app, ctx);
   return { app, state: () => current };
@@ -66,5 +71,24 @@ describe('PUT /api/settings — aiCoachEnabled gate', () => {
     const res = await put(app, { aiCoachEnabled: true, aiCoachPriceInputUsdPerMTok: 1.25 });
     expect(res.statusCode).toBe(200);
     expect(t.state().aiCoachPriceInputUsdPerMTok).toBe(1.25);
+  });
+});
+
+describe('GET /api/settings — env-owned calendar', () => {
+  it('serves workweek and weekStart from env over the stored defaults', async () => {
+    const t = buildApp({ adminPassword: null });
+    app = t.app;
+    const res = await app.inject({ method: 'GET', url: '/api/settings' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ displayTimezone: 'UTC', workweek: [1, 2, 3, 4, 5], weekStart: 1 });
+  });
+
+  it('ignores attempts to change them through PUT', async () => {
+    const t = buildApp({ adminPassword: null });
+    app = t.app;
+    const res = await put(app, { workweek: [6], weekStart: 0, inactiveDays: 9 });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ workweek: [1, 2, 3, 4, 5], weekStart: 1, inactiveDays: 9 });
+    expect(t.state().workweek).toEqual([0, 1, 2, 3, 4]); // nothing stored
   });
 });

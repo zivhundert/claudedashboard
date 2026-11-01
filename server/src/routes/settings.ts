@@ -9,8 +9,9 @@ const targetNum = z.number().positive().finite();
 const shareNum = z.number().positive().max(1).finite();
 const hourNum = z.number().int().min(0).max(23);
 
-// displayTimezone is deliberately absent: the zone comes from ORG_TIMEZONE, and
-// an editable copy that nothing honoured is worse than no field at all.
+// displayTimezone, workweek and weekStart are deliberately absent: they come
+// from ORG_TIMEZONE / WORKWEEK / WEEK_START, and an editable copy that nothing
+// honoured is worse than no field at all.
 const settingsPatchSchema = z.object({
   linesPerMinute: z.number().positive().optional(),
   hourlyRateUsd: z.number().nonnegative().optional(),
@@ -56,13 +57,15 @@ const settingsPatchSchema = z.object({
 });
 
 export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): void {
-  /** The stored settings, with the zone overridden by ORG_TIMEZONE. */
+  /** The stored settings, with the zone and calendar overridden by ORG_TIMEZONE, WORKWEEK and WEEK_START. */
   // scoreTargets is resolved on the way out too: rows persisted by an older
   // build predate whole target groups, and a shallow settings merge would hand
   // the client a half-populated object.
   const merged = (stored: AppSettings): AppSettings => ({
     ...stored,
     displayTimezone: ctx.env.orgTimezone,
+    workweek: ctx.env.workweek,
+    weekStart: ctx.env.weekStart,
     scoreTargets: resolveTargets(stored.scoreTargets),
   });
 

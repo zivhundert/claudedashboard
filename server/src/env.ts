@@ -1,7 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_ORG_TIMEZONE, type DataSourceDto, type PrivacyMode } from '@dash/shared';
+import {
+  DEFAULT_ORG_TIMEZONE,
+  parseWeekStart,
+  parseWorkweek,
+  type DataSourceDto,
+  type PrivacyMode,
+  type WeekStart,
+} from '@dash/shared';
 import { z } from 'zod';
 import { isFoundryHost, normalizeFoundryBaseUrl } from './ai/baseUrl';
 
@@ -70,6 +77,18 @@ const boolishToNum = (v: unknown): unknown => {
   return v;
 };
 
+/** zod transform over a shared parser: the parser's RangeError message becomes the issue. */
+const parsedBy =
+  <T>(parse: (v: string) => T) =>
+  (v: string, ctx: z.RefinementCtx): T => {
+    try {
+      return parse(v);
+    } catch (err) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: err instanceof Error ? err.message : String(err) });
+      return z.NEVER;
+    }
+  };
+
 const schema = z.object({
   ADMIN_API_KEY: z.preprocess(emptyToUndef, z.string().optional()),
   ENTERPRISE_ANALYTICS_KEY: z.preprocess(emptyToUndef, z.string().optional()),
@@ -79,7 +98,8 @@ const schema = z.object({
   PORT: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(65535).default(8080)),
   DB_PATH: z.preprocess(emptyToUndef, z.string().default('./data/dashboard.db')),
   SYNC_CRON: z.preprocess(emptyToUndef, z.string().default('0 5 * * *')),
-  SYNC_TZ: z.preprocess(emptyToUndef, z.string().default('Asia/Jerusalem')),
+  /** Zone SYNC_CRON runs in; unset follows ORG_TIMEZONE, so moving the org's zone moves the nightly job too. */
+  SYNC_TZ: z.preprocess(emptyToUndef, z.string().optional()),
   INTRADAY_SYNC_MINUTES: z.preprocess(emptyToUndef, z.coerce.number().int().min(0).default(60)),
   BACKFILL_START: z.preprocess(emptyToUndef, z.string().regex(DATE_RE).optional()),
   BACKFILL_EMPTY_STREAK: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).default(14)),
@@ -104,6 +124,15 @@ const schema = z.object({
   OTEL_MAX_BODY_MB: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(512).default(8)),
   /** IANA zone the daily tables are keyed by, and the org work-week's zone. */
   ORG_TIMEZONE: z.preprocess(emptyToUndef, z.string().default(DEFAULT_ORG_TIMEZONE)),
+  /**
+   * The org's working weekdays: what scoring targets count as workdays, and the
+   * streak fallback for someone with no history yet. Two presets, sun-thu
+   * (default) and mon-fri; any other week is a comma list of days
+   * (mon,tue,wed,thu,fri, or numbers 0–6, 0=Sunday, e.g. 1,2,3,4,5).
+   */
+  WORKWEEK: z.preprocess(emptyToUndef, z.string().default('sun-thu').transform(parsedBy(parseWorkweek))),
+  /** First day of a week bucket: sun (default) or mon. */
+  WEEK_START: z.preprocess(emptyToUndef, z.string().default('sun').transform(parsedBy(parseWeekStart))),
   /** Explicit data-source override; keys are still validated per source. */
   DATA_SOURCE: z.preprocess(emptyToUndef, z.enum(['demo', 'telemetry', 'console', 'enterprise']).optional()),
   /** How much detail the OTel receiver keeps (see otel/privacy.ts). */
@@ -195,6 +224,9 @@ export interface Env {
   /** Dedicated OTLP receiver port, or null when /otel/* shares `port`. */
   otelPort: number | null;
   orgTimezone: string;
+  /** WORKWEEK, sorted, 0=Sunday */
+  workweek: number[];
+  weekStart: WeekStart;
   /** AI coach (Foundry or an Anthropic-compatible proxy); null when no key is configured. */
   ai: AiConfig | null;
   /** Gate for privileged Settings edits (coach prompt); null = such edits refused. */
@@ -285,7 +317,7 @@ export function loadEnv(): Env {
     port: p.PORT,
     dbPath: resolveFromRepoRoot(p.DB_PATH),
     syncCron: p.SYNC_CRON,
-    syncTz: p.SYNC_TZ,
+    syncTz: p.SYNC_TZ ?? p.ORG_TIMEZONE,
     intradaySyncMinutes: p.INTRADAY_SYNC_MINUTES,
     backfillStart: p.BACKFILL_START ?? null,
     backfillEmptyStreak: p.BACKFILL_EMPTY_STREAK,
@@ -297,6 +329,8 @@ export function loadEnv(): Env {
     // OTEL_PORT equal to PORT is the single-listener setup spelled out explicitly.
     otelPort: p.OTEL_PORT !== undefined && p.OTEL_PORT !== p.PORT ? p.OTEL_PORT : null,
     orgTimezone: p.ORG_TIMEZONE,
+    workweek: [...p.WORKWEEK].sort((a, b) => a - b),
+    weekStart: p.WEEK_START,
     ai: resolveAi(p),
     adminPassword: p.ADMIN_PASSWORD ?? null,
   };

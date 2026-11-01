@@ -1,7 +1,7 @@
 import { utcHourRangeOfLocalDays } from '@dash/shared';
 import { activeDaySql } from './activeDay';
 import type { Db } from '../db/connection';
-import { orgTimezone } from '../util/time';
+import { orgTimezone, orgWeekStart } from '../util/time';
 
 // ---------------------------------------------------------------------------
 // Row shapes returned by the aggregate queries
@@ -186,10 +186,14 @@ export interface ModelDeltaRow {
 
 export type Granularity = 'day' | 'week' | 'month';
 
-/** Bucket-start expression per granularity; weeks start Sunday (Israeli convention). */
+/**
+ * Bucket-start expression per granularity. Weeks start on WEEK_START, bound as
+ * @weekStart (0=Sunday, 1=Monday) — the same arithmetic as `weekStartOf` in
+ * shared, so server buckets and client labels agree.
+ */
 const BUCKET_EXPR: Record<Granularity, string> = {
   day: 'd.date',
-  week: `date(d.date, '-' || strftime('%w', d.date) || ' days')`,
+  week: `date(d.date, '-' || ((CAST(strftime('%w', d.date) AS INTEGER) + 7 - @weekStart) % 7) || ' days')`,
   month: `date(d.date, 'start of month')`,
 };
 
@@ -269,7 +273,7 @@ export class UsageRepo {
          WHERE d.date BETWEEN @from AND @to AND u.actor_type = 'user' ${teamFilter}
          GROUP BY ${bucket}`,
       )
-      .all({ from, to, teamId }) as DailyCoreRow[];
+      .all({ from, to, teamId, weekStart: orgWeekStart() }) as DailyCoreRow[];
   }
 
   dailyCost(from: string, to: string, teamId?: number, gran: Granularity = 'day'): DailyCostRow[] {
@@ -284,7 +288,7 @@ export class UsageRepo {
          WHERE d.date BETWEEN @from AND @to ${teamFilter}
          GROUP BY ${bucket}`,
       )
-      .all({ from, to, teamId }) as DailyCostRow[];
+      .all({ from, to, teamId, weekStart: orgWeekStart() }) as DailyCostRow[];
   }
 
   modelTotals(from: string, to: string, teamId?: number, userId?: number): ModelTotalsRow[] {
