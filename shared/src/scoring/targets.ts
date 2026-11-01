@@ -4,11 +4,12 @@
  * rescale anyone else's score: an axis score is a pure function of the user's
  * own numbers and these constants.
  *
- * Volume targets are rates per workday (Sun–Thu) and scale with the selected
- * range via `workdaysBetween`; ratio targets are flat. Defaults were derived
- * from a real 31-user org's p90 rates (2026-08); admins can override any
- * subset via settings (`scoreTargets`) — unknown/invalid values fall back to
- * these defaults rather than zeroing anyone.
+ * Volume targets are rates per workday (the configured WORKWEEK, default
+ * Sun–Thu) and scale with the selected range via `workdaysBetween`; ratio
+ * targets are flat. Defaults were derived from a real 31-user org's p90 rates
+ * (2026-08); admins can override any subset via settings (`scoreTargets`) —
+ * unknown/invalid values fall back to these defaults rather than zeroing
+ * anyone.
  */
 
 export interface ScoreTargets {

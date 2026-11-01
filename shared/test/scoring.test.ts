@@ -22,6 +22,7 @@ import {
   utcHourRangeOfLocalDays,
   currentWorkdayStreak,
   isWorkday,
+  parseWorkweek,
   workdaysBetween,
 } from '../src/time/workweek.js';
 
@@ -286,6 +287,36 @@ describe('baselines (badges only)', () => {
 
 const TARGETS = DEFAULT_SCORE_TARGETS;
 const FULL_COVERAGE = { pullRequests: 1, commits: 1 };
+
+describe('configured work week (WORKWEEK) in Adoption', () => {
+  const SUN_THU = parseWorkweek('sun-thu');
+  const MON_FRI = parseWorkweek('mon-fri');
+  const adoptionUnder = (week: ReadonlySet<number>, from: string, to: string, overrides: Partial<ScoringInput>) =>
+    computeAxes(makeInput({ ...overrides, workdays: workdaysBetween(from, to, week) }), TARGETS, FULL_COVERAGE)
+      .adoption;
+
+  it('a Mon–Fri week with a missed Friday is no longer "perfect" (Mon 26 – Fri 30 Oct 2026)', () => {
+    // worked Mon–Thu: 32 sessions, 200 tool decisions
+    const worked = { sessions: 32, activeDays: 4, toolAccepted: 160, toolRejected: 40 };
+    expect(workdaysBetween('2026-10-26', '2026-10-30', SUN_THU)).toBe(4);
+    expect(workdaysBetween('2026-10-26', '2026-10-30', MON_FRI)).toBe(5);
+    const sunThu = adoptionUnder(SUN_THU, '2026-10-26', '2026-10-30', worked);
+    const monFri = adoptionUnder(MON_FRI, '2026-10-26', '2026-10-30', worked);
+    expect(sunThu).toBe(100); // Sun–Thu counts 4 workdays, so the missed Friday is invisible
+    expect(monFri).toBeLessThan(sunThu);
+  });
+
+  it('Friday "Today": Sun–Thu sees 0 workdays and zeroes consistency, Mon–Fri does not', () => {
+    // fully active on Friday 30 Oct 2026, every target met
+    const worked = { sessions: 8, activeDays: 1, toolAccepted: 40, toolRejected: 10 };
+    expect(workdaysBetween('2026-10-30', '2026-10-30', SUN_THU)).toBe(0);
+    expect(workdaysBetween('2026-10-30', '2026-10-30', MON_FRI)).toBe(1);
+    const sunThu = adoptionUnder(SUN_THU, '2026-10-30', '2026-10-30', worked);
+    const monFri = adoptionUnder(MON_FRI, '2026-10-30', '2026-10-30', worked);
+    expect(monFri).toBe(100);
+    expect(sunThu).toBeLessThan(monFri); // the whole Mon–Fri team, every Friday
+  });
+});
 
 describe('axis scores and guards', () => {
   const population = [
