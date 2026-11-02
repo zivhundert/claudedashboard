@@ -145,6 +145,9 @@ export function MemberTable({
         : { key, dir: key === 'name' || key === 'team' ? 1 : -1 },
     );
 
+  // the same for every row, so build it once instead of per row
+  const workdaysTitle = `Active days (incl. weekends) / ${formatWorkweek(displayWorkweek(), displayWeekStart())} workdays`;
+
   const rankOf = useMemo(() => {
     const byComposite = [...(rankEntries ?? entries)].sort(
       (a, b) => (b.scores.composite ?? -1) - (a.scores.composite ?? -1),
@@ -283,7 +286,7 @@ export function MemberTable({
                     {fmtNumber(e.metrics.sessions)}
                     <span
                       className="text-muted"
-                      title={`Active days (incl. weekends) / ${formatWorkweek(displayWorkweek(), displayWeekStart())} workdays`}
+                      title={workdaysTitle}
                     >
                       {' '}
                       · {e.metrics.activeDays}/{e.metrics.workdays}d
