@@ -128,7 +128,10 @@ export function weekdayOf(date: string): number {
   return toUtcDate(date).getUTCDay();
 }
 
-/** Sun–Thu: the `WORKWEEK` default, and the no-history fallback of {@link expectedWeekdays}. */
+/**
+ * Sun–Thu: the `WORKWEEK` default. The helpers below take the week explicitly
+ * (no default), so a call that forgets the configured calendar fails to compile.
+ */
 export const DEFAULT_WORKWEEK: ReadonlySet<number> = new Set([0, 1, 2, 3, 4]);
 
 /** First day of a week bucket: 0=Sunday, 1=Monday. */
@@ -179,7 +182,7 @@ export function parseWeekStart(spec: string): WeekStart {
   throw new RangeError(`unknown week start "${spec.trim()}" — use sun or mon`);
 }
 
-export function isWorkday(date: string, workweek: ReadonlySet<number> = DEFAULT_WORKWEEK): boolean {
+export function isWorkday(date: string, workweek: ReadonlySet<number>): boolean {
   return workweek.has(weekdayOf(date));
 }
 
@@ -188,12 +191,12 @@ export function isWorkday(date: string, workweek: ReadonlySet<number> = DEFAULT_
  * uses the same arithmetic — (weekday + 7 - weekStart) % 7 days back — so the
  * server's buckets and the client's labels always agree.
  */
-export function weekStartOf(date: string, weekStart: WeekStart = DEFAULT_WEEK_START): string {
+export function weekStartOf(date: string, weekStart: WeekStart): string {
   return addDays(date, -((weekdayOf(date) + 7 - weekStart) % 7));
 }
 
 /** Weekdays (0=Sunday) in display order, starting at `weekStart`. */
-export function weekdayOrder(weekStart: WeekStart = DEFAULT_WEEK_START): number[] {
+export function weekdayOrder(weekStart: WeekStart): number[] {
   return Array.from({ length: 7 }, (_, i) => (i + weekStart) % 7);
 }
 
@@ -201,10 +204,7 @@ export function weekdayOrder(weekStart: WeekStart = DEFAULT_WEEK_START): number[
  * Human label for a work week: one contiguous run (it may wrap past Saturday)
  * reads 'Sun–Thu' / 'Mon–Fri', anything else is a list in week order.
  */
-export function formatWorkweek(
-  workweek: ReadonlySet<number>,
-  weekStart: WeekStart = DEFAULT_WEEK_START,
-): string {
+export function formatWorkweek(workweek: ReadonlySet<number>, weekStart: WeekStart): string {
   const days = weekdayOrder(weekStart).filter((wd) => workweek.has(wd));
   if (days.length === 0) return '—';
   if (days.length === 1) return dayLabel(days[0] ?? 0);
@@ -246,7 +246,7 @@ export function expectedWeekdays(
   activeDates: ReadonlySet<string>,
   from: string,
   to: string,
-  fallback: ReadonlySet<number> = DEFAULT_WORKWEEK,
+  fallback: ReadonlySet<number>,
 ): ReadonlySet<number> {
   const occurrences = new Array<number>(7).fill(0);
   const active = new Array<number>(7).fill(0);
@@ -266,12 +266,8 @@ export function expectedWeekdays(
   return expected;
 }
 
-/** Count the days of `workweek` (default Sun–Thu) in [from, to] inclusive. */
-export function workdaysBetween(
-  from: string,
-  to: string,
-  workweek: ReadonlySet<number> = DEFAULT_WORKWEEK,
-): number {
+/** Count the days of `workweek` in [from, to] inclusive. */
+export function workdaysBetween(from: string, to: string, workweek: ReadonlySet<number>): number {
   let count = 0;
   const end = toUtcDate(to).getTime();
   for (let t = toUtcDate(from).getTime(); t <= end; t += DAY_MS) {
@@ -317,7 +313,7 @@ function decidingDayAtOrBefore(
 export function currentWorkdayStreak(
   activeDates: ReadonlySet<string>,
   asOf: string,
-  expected: ReadonlySet<number> = DEFAULT_WORKWEEK,
+  expected: ReadonlySet<number>,
 ): number {
   let cursor = decidingDayAtOrBefore(activeDates, expected, asOf);
   if (cursor !== null && !activeDates.has(cursor)) {
@@ -337,10 +333,7 @@ export function currentWorkdayStreak(
  * idle rest days — the same cap `currentWorkdayStreak` enforces, so the two can
  * never disagree about whether a gap is contiguous.
  */
-export function bestWorkdayStreak(
-  activeDates: ReadonlySet<string>,
-  expected: ReadonlySet<number> = DEFAULT_WORKWEEK,
-): number {
+export function bestWorkdayStreak(activeDates: ReadonlySet<string>, expected: ReadonlySet<number>): number {
   if (activeDates.size === 0) return 0;
   const sorted = [...activeDates].sort();
   let best = 0;

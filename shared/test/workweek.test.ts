@@ -53,9 +53,9 @@ describe('parseWeekStart', () => {
 });
 
 describe('isWorkday', () => {
-  it('defaults to Sun–Thu and follows a given week', () => {
-    expect(isWorkday('2026-10-25')).toBe(true); // Sunday
-    expect(isWorkday('2026-10-30')).toBe(false); // Friday
+  it('follows the given week', () => {
+    expect(isWorkday('2026-10-25', DEFAULT_WORKWEEK)).toBe(true); // Sunday
+    expect(isWorkday('2026-10-30', DEFAULT_WORKWEEK)).toBe(false); // Friday
     const monFri = parseWorkweek('mon-fri');
     expect(isWorkday('2026-10-25', monFri)).toBe(false);
     expect(isWorkday('2026-10-30', monFri)).toBe(true);
@@ -68,7 +68,6 @@ describe('workdaysBetween', () => {
     expect(weekdayOf('2026-10-26')).toBe(1);
     expect(workdaysBetween('2026-10-26', '2026-10-30', parseWorkweek('mon-fri'))).toBe(5);
     expect(workdaysBetween('2026-10-26', '2026-10-30', parseWorkweek('sun-thu'))).toBe(4);
-    expect(workdaysBetween('2026-10-26', '2026-10-30')).toBe(4); // default stays Sun–Thu
   });
 
   it('gives 5 for any full week under either five-day week', () => {
@@ -86,9 +85,9 @@ describe('workdaysBetween', () => {
 });
 
 describe('weekStartOf', () => {
-  it('Sunday weeks (default)', () => {
-    expect(weekStartOf('2026-10-25')).toBe('2026-10-25'); // the Sunday itself
-    expect(weekStartOf('2026-10-31')).toBe('2026-10-25'); // Saturday
+  it('Sunday weeks', () => {
+    expect(weekStartOf('2026-10-25', 0)).toBe('2026-10-25'); // the Sunday itself
+    expect(weekStartOf('2026-10-31', 0)).toBe('2026-10-25'); // Saturday
     expect(weekStartOf('2026-10-26', 0)).toBe('2026-10-25');
   });
 
@@ -125,16 +124,16 @@ describe('weekdayOrder / formatWorkweek', () => {
   });
 
   it('labels contiguous weeks as a range, even across the week start', () => {
-    expect(formatWorkweek(parseWorkweek('sun-thu'))).toBe('Sun–Thu');
-    expect(formatWorkweek(parseWorkweek('mon-fri'))).toBe('Mon–Fri');
+    expect(formatWorkweek(parseWorkweek('sun-thu'), 0)).toBe('Sun–Thu');
+    expect(formatWorkweek(parseWorkweek('mon-fri'), 0)).toBe('Mon–Fri');
     expect(formatWorkweek(parseWorkweek('sun-thu'), 1)).toBe('Sun–Thu');
-    expect(formatWorkweek(parseWorkweek('fri,sat,sun'))).toBe('Fri–Sun');
+    expect(formatWorkweek(parseWorkweek('fri,sat,sun'), 0)).toBe('Fri–Sun');
     expect(formatWorkweek(parseWorkweek('0,1,2,3,4,5,6'), 1)).toBe('Mon–Sun');
   });
 
   it('lists anything else in week order', () => {
-    expect(formatWorkweek(parseWorkweek('mon,wed,fri'))).toBe('Mon, Wed, Fri');
+    expect(formatWorkweek(parseWorkweek('mon,wed,fri'), 0)).toBe('Mon, Wed, Fri');
     expect(formatWorkweek(parseWorkweek('sun,tue'), 1)).toBe('Tue, Sun');
-    expect(formatWorkweek(parseWorkweek('wed'))).toBe('Wed');
+    expect(formatWorkweek(parseWorkweek('wed'), 0)).toBe('Wed');
   });
 });
