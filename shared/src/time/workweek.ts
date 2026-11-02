@@ -2,10 +2,13 @@
  * Work-week math over 'YYYY-MM-DD' date strings, plus the org-local ⇄ UTC
  * conversions the daily and hourly tables need.
  *
- * There is no single org work week: `expectedWeekdays` learns each person's from
- * their own history, so Sun–Thu, Mon–Fri and a six-day week all measure the same
- * way. Sun–Thu survives only as `DEFAULT_WORKWEEK`, the no-history fallback, and
- * in `workdaysBetween` (a calendar count, ~identical for any five-day week).
+ * Streaks have no single org work week: `expectedWeekdays` learns each person's
+ * from their own history, so Sun–Thu, Mon–Fri and a six-day week all measure the
+ * same way. The org's configured week (`WORKWEEK`, see `parseWorkweek`; default
+ * Sun–Thu) is only the no-history fallback there, and the calendar that
+ * `workdaysBetween` counts for scoring targets. `WEEK_START` (default Sunday)
+ * decides where week buckets begin (`weekStartOf`). Nothing here reads env —
+ * the server resolves both once at boot and passes them in.
  * Daily dates are ORG-LOCAL calendar days (see `localDateOf`,
  * used by the telemetry ingest) — the weekday is a property of the date string
  * itself, no timezone conversion involved there. Hour tables stay UTC, so any
@@ -125,12 +128,94 @@ export function weekdayOf(date: string): number {
   return toUtcDate(date).getUTCDay();
 }
 
-/** Sun–Thu. Only a fallback now — see {@link expectedWeekdays}. */
+/**
+ * Sun–Thu: the `WORKWEEK` default. The helpers below take the week explicitly
+ * (no default), so a call that forgets the configured calendar fails to compile.
+ */
 export const DEFAULT_WORKWEEK: ReadonlySet<number> = new Set([0, 1, 2, 3, 4]);
 
-export function isWorkday(date: string): boolean {
-  const wd = weekdayOf(date);
-  return wd >= 0 && wd <= 4; // Sun–Thu
+/** First day of a week bucket: 0=Sunday, 1=Monday. */
+export type WeekStart = 0 | 1;
+
+export const DEFAULT_WEEK_START: WeekStart = 0;
+
+const DAY_NAMES: readonly string[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DAY_LABELS: readonly string[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const dayLabel = (wd: number): string => DAY_LABELS[wd] ?? String(wd);
+
+const WORKWEEK_PRESETS: Record<string, readonly number[]> = {
+  'sun-thu': [0, 1, 2, 3, 4],
+  'mon-fri': [1, 2, 3, 4, 5],
+};
+
+const WORKWEEK_HINT = 'use sun-thu, mon-fri, or a list like mon,tue,wed,thu,fri (or numbers 0–6, 0=Sunday, e.g. 1,2,3,4,5)';
+
+/**
+ * Parse a WORKWEEK value: one of the two presets ('sun-thu', 'mon-fri') or, for
+ * any other week, a comma list of day names ('mon,tue,wed,thu,fri') or numbers
+ * ('0,1,2,3,4', 0=Sunday). Case and whitespace are ignored and duplicates
+ * collapse. Throws a RangeError on an unknown day or a list with no days in it,
+ * so a typo fails boot instead of quietly scoring everyone against the wrong
+ * week.
+ */
+export function parseWorkweek(spec: string): ReadonlySet<number> {
+  const normalized = spec.trim().toLowerCase();
+  const preset = WORKWEEK_PRESETS[normalized];
+  if (preset) return new Set(preset);
+  const days = new Set<number>();
+  for (const raw of normalized.split(',')) {
+    const token = raw.trim();
+    if (token === '') continue;
+    const wd = /^[0-6]$/.test(token) ? Number(token) : DAY_NAMES.indexOf(token);
+    if (wd < 0) throw new RangeError(`unknown day "${token}" — ${WORKWEEK_HINT}`);
+    days.add(wd);
+  }
+  if (days.size === 0) throw new RangeError(`no days in "${spec}" — ${WORKWEEK_HINT}`);
+  return days;
+}
+
+/** Parse a WEEK_START value ('sun' | 'mon', any case); throws a RangeError otherwise. */
+export function parseWeekStart(spec: string): WeekStart {
+  const normalized = spec.trim().toLowerCase();
+  if (normalized === 'sun') return 0;
+  if (normalized === 'mon') return 1;
+  throw new RangeError(`unknown week start "${spec.trim()}" — use sun or mon`);
+}
+
+export function isWorkday(date: string, workweek: ReadonlySet<number>): boolean {
+  return workweek.has(weekdayOf(date));
+}
+
+/**
+ * Start date of the week containing `date`. The SQL week bucket in usageRepo
+ * uses the same arithmetic — (weekday + 7 - weekStart) % 7 days back — so the
+ * server's buckets and the client's labels always agree.
+ */
+export function weekStartOf(date: string, weekStart: WeekStart): string {
+  return addDays(date, -((weekdayOf(date) + 7 - weekStart) % 7));
+}
+
+/** Weekdays (0=Sunday) in display order, starting at `weekStart`. */
+export function weekdayOrder(weekStart: WeekStart): number[] {
+  return Array.from({ length: 7 }, (_, i) => (i + weekStart) % 7);
+}
+
+/**
+ * Human label for a work week: one contiguous run (it may wrap past Saturday)
+ * reads 'Sun–Thu' / 'Mon–Fri', anything else is a list in week order.
+ */
+export function formatWorkweek(workweek: ReadonlySet<number>, weekStart: WeekStart): string {
+  const days = weekdayOrder(weekStart).filter((wd) => workweek.has(wd));
+  if (days.length === 0) return '—';
+  if (days.length === 1) return dayLabel(days[0] ?? 0);
+  if (days.length === 7) return `${dayLabel(weekStart)}–${dayLabel((weekStart + 6) % 7)}`;
+  // a run starts on a workday whose previous day is off
+  const runStarts = days.filter((wd) => !workweek.has((wd + 6) % 7));
+  const start = runStarts[0];
+  if (runStarts.length === 1 && start !== undefined) {
+    return `${dayLabel(start)}–${dayLabel((start + days.length - 1) % 7)}`;
+  }
+  return days.map(dayLabel).join(', ');
 }
 
 /** A weekday counts as "expected" once the person works at least half of them. */
@@ -161,7 +246,7 @@ export function expectedWeekdays(
   activeDates: ReadonlySet<string>,
   from: string,
   to: string,
-  fallback: ReadonlySet<number> = DEFAULT_WORKWEEK,
+  fallback: ReadonlySet<number>,
 ): ReadonlySet<number> {
   const occurrences = new Array<number>(7).fill(0);
   const active = new Array<number>(7).fill(0);
@@ -181,13 +266,12 @@ export function expectedWeekdays(
   return expected;
 }
 
-/** Count Sun–Thu days in [from, to] inclusive. */
-export function workdaysBetween(from: string, to: string): number {
+/** Count the days of `workweek` in [from, to] inclusive. */
+export function workdaysBetween(from: string, to: string, workweek: ReadonlySet<number>): number {
   let count = 0;
   const end = toUtcDate(to).getTime();
   for (let t = toUtcDate(from).getTime(); t <= end; t += DAY_MS) {
-    const wd = new Date(t).getUTCDay();
-    if (wd <= 4) count++;
+    if (workweek.has(new Date(t).getUTCDay())) count++;
   }
   return count;
 }
@@ -229,7 +313,7 @@ function decidingDayAtOrBefore(
 export function currentWorkdayStreak(
   activeDates: ReadonlySet<string>,
   asOf: string,
-  expected: ReadonlySet<number> = DEFAULT_WORKWEEK,
+  expected: ReadonlySet<number>,
 ): number {
   let cursor = decidingDayAtOrBefore(activeDates, expected, asOf);
   if (cursor !== null && !activeDates.has(cursor)) {
@@ -249,10 +333,7 @@ export function currentWorkdayStreak(
  * idle rest days — the same cap `currentWorkdayStreak` enforces, so the two can
  * never disagree about whether a gap is contiguous.
  */
-export function bestWorkdayStreak(
-  activeDates: ReadonlySet<string>,
-  expected: ReadonlySet<number> = DEFAULT_WORKWEEK,
-): number {
+export function bestWorkdayStreak(activeDates: ReadonlySet<string>, expected: ReadonlySet<number>): number {
   if (activeDates.size === 0) return 0;
   const sorted = [...activeDates].sort();
   let best = 0;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, RotateCcw, Save, Sparkles } from 'lucide-react';
-import { DEFAULT_SETTINGS, type AppSettings } from '@dash/shared';
+import { DEFAULT_SETTINGS, formatWorkweek, type AppSettings, type SettingsResponse } from '@dash/shared';
 import { useCapabilities, useCoachUsage, useSaveSettings, useSettings } from '@/lib/queries';
 import { ApiError } from '@/lib/api';
 import { fmtTokens, relativeDateTime } from '@/lib/format';
@@ -13,16 +13,22 @@ import { CoachPromptEditor } from '@/components/CoachPromptEditor';
 import { Button, Field, InfoPopover, Switch, inputCls } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
+/** The editable part of the response: the env-owned calendar never enters the form. */
+function storedOf({ calendar: _calendar, ...stored }: SettingsResponse): AppSettings {
+  return stored;
+}
+
 export default function AdminSettings() {
   const settingsQ = useSettings();
   const save = useSaveSettings();
   const resetRoi = usePrefsStore((s) => s.resetRoi);
-  const [form, setForm] = useState<AppSettings>(DEFAULT_SETTINGS);
+  // start from the server's values when they're already cached — no flash of the defaults
+  const [form, setForm] = useState<AppSettings>(() => (settingsQ.data ? storedOf(settingsQ.data) : DEFAULT_SETTINGS));
   const [policyOpen, setPolicyOpen] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
   useEffect(() => {
-    if (settingsQ.data) setForm(settingsQ.data);
+    if (settingsQ.data) setForm(storedOf(settingsQ.data));
   }, [settingsQ.data]);
 
   if (settingsQ.isLoading) {
@@ -80,12 +86,26 @@ export default function AdminSettings() {
 
       <section className="card space-y-4 p-5">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">Display</h2>
+        {/* zone and calendar come from the server's env, not the form — "Reset to defaults" can't change them */}
         <Field
           label="Display timezone"
           hint="Set by ORG_TIMEZONE on the server — daily buckets are keyed by this zone, so it cannot change from here."
         >
-          <input value={form.displayTimezone} readOnly disabled className={inputCls} />
+          <input value={saved?.displayTimezone ?? ''} readOnly disabled className={inputCls} />
         </Field>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Work week" hint="Set by WORKWEEK on the server — the days scoring targets count as workdays.">
+            <input
+              value={saved ? formatWorkweek(new Set(saved.calendar.workweek), saved.calendar.weekStart) : ''}
+              readOnly
+              disabled
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Week starts on" hint="Set by WEEK_START on the server — where weekly buckets begin.">
+            <input value={saved ? (saved.calendar.weekStart === 1 ? 'Monday' : 'Sunday') : ''} readOnly disabled className={inputCls} />
+          </Field>
+        </div>
 
         <h2 className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted">
           Business value

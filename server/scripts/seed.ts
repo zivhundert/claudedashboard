@@ -8,14 +8,14 @@
  * departed user, API-key actors, hourly heatmap data and score snapshots
  * (yesterday + 8 days ago) so celebrate cards and Top Movers have material.
  */
-import { addDays, weekdayOf } from '@dash/shared';
+import { addDays, isWorkday } from '@dash/shared';
 import { openDb } from '../src/db/connection';
 import { migrate } from '../src/db/migrate';
-import { loadDotEnv, resolveFromRepoRoot } from '../src/env';
+import { loadCalendarEnv, loadDotEnv, resolveFromRepoRoot } from '../src/env';
 import { createRepos } from '../src/repos';
 import { buildLeaderboardData } from '../src/services/scoring';
 import { SNAPSHOT_RANGE_KEY } from '../src/sync/snapshot';
-import { hourIsoOf, localHourOfUtc, localWeekdayOfUtc, nowIso, todayUtc } from '../src/util/time';
+import { configureCalendar, hourIsoOf, localHourOfUtc, localWeekdayOfUtc, nowIso, todayUtc } from '../src/util/time';
 
 // ---------------------------------------------------------------------------
 // Seeded PRNG — mulberry32(42), fully deterministic run-to-run
@@ -208,6 +208,15 @@ function main(): void {
   loadDotEnv();
   process.env['DB_PATH'] = explicitDbPath ?? './data/dashboard.db';
   const dbPath = process.env['DB_PATH'] ?? './data/dashboard.db';
+  // The demo follows the org calendar like the server: weekends are the days
+  // WORKWEEK leaves out (default Sun–Thu → Fri/Sat), and the score snapshots
+  // below count workdays the same way. Parsed before the db is touched, so a
+  // bad value fails without wiping anything.
+  // env.ts's own parsing: the server's defaults and errors, nothing to drift
+  const calendar = loadCalendarEnv();
+  configureCalendar(calendar);
+  const workweek: ReadonlySet<number> = new Set(calendar.workweek);
+  const isWeekend = (date: string): boolean => !isWorkday(date, workweek);
   const db = openDb(dbPath);
   // Safety: a database with real (non-example) people is never a demo db.
   const realUsers = (() => {
@@ -475,8 +484,7 @@ function main(): void {
       for (let d = 0; d < DAYS_OF_HISTORY; d++) {
         const date = addDays(historyStart, d);
         if (dev.departed && date >= addDays(today, -90)) continue; // left mid-history
-        const wd = weekdayOf(date);
-        const weekend = wd === 5 || wd === 6; // Fri/Sat
+        const weekend = isWeekend(date);
         const activeP = weekend ? 0.05 : persona.activeP;
         if (!chance(activeP)) continue;
 
@@ -529,8 +537,7 @@ function main(): void {
     for (const actor of apiActors) {
       for (let d = 0; d < DAYS_OF_HISTORY; d++) {
         const date = addDays(historyStart, d);
-        const wd = weekdayOf(date);
-        if (wd === 5 || wd === 6) continue;
+        if (isWeekend(date)) continue;
         if (!chance(0.6)) continue;
         const input = randInt(10_000, 80_000);
         const output = Math.round(input / 5);
@@ -569,7 +576,7 @@ function main(): void {
   );
 
   const hourWeight = (profile: HourProfile, ilHour: number, ilWeekday: number): number => {
-    const weekend = ilWeekday === 5 || ilWeekday === 6;
+    const weekend = !workweek.has(ilWeekday);
     if (profile === 'night') {
       const w = ilHour >= 22 || ilHour < 2 ? 1.0 : ilHour >= 19 ? 0.35 : ilHour >= 10 && ilHour < 17 ? 0.15 : 0.05;
       return weekend ? w * 0.5 : w;
@@ -688,8 +695,7 @@ function main(): void {
       const profile = KEY_USAGE_RANGES[spec.usage];
       for (let d = 0; d < KEY_USAGE_DAYS; d++) {
         const date = addDays(today, -d);
-        const wd = weekdayOf(date);
-        const weekend = wd === 5 || wd === 6;
+        const weekend = isWeekend(date);
         if (!chance(weekend ? profile.p * 0.15 : profile.p)) continue;
         const input = randInt(profile.input[0], profile.input[1]);
         insertKeyUsage.run(
@@ -960,8 +966,7 @@ function main(): void {
       const persona = PERSONAS[dev.kind as Exclude<PersonaKind, 'none'>];
       for (let d = 0; d < OTEL_DAYS; d++) {
         const date = addDays(otelStart, d);
-        const wd = weekdayOf(date);
-        const weekend = wd === 5 || wd === 6;
+        const weekend = isWeekend(date);
         if (!chance(weekend ? persona.activeP * 0.06 : persona.activeP)) continue;
 
         // --- skills: trigger mix ~55% user-slash / 35% proactive / 10% nested,
@@ -1106,8 +1111,7 @@ function main(): void {
 
       for (let d = 0; d < OTEL_DAYS; d++) {
         const date = addDays(otelStart, d);
-        const wd = weekdayOf(date);
-        const weekend = wd === 5 || wd === 6;
+        const weekend = isWeekend(date);
         if (!chance(weekend ? persona.activeP * 0.06 : persona.activeP)) continue;
 
         // activity: 1-5h of user-active time on workdays, CLI ~2-3x that

@@ -1,6 +1,7 @@
 import {
   addDays,
   daysBetween,
+  weekStartOf,
   type ModelDailyCost,
   type ModelUsage,
   type OverviewDailyPoint,
@@ -10,7 +11,7 @@ import {
 } from '@dash/shared';
 import type { Repos } from '../repos';
 import type { Granularity } from '../repos/usageRepo';
-import { hourIsoOf, localHourOfUtc, todayLocal } from '../util/time';
+import { hourIsoOf, localHourOfUtc, orgWeekStart, todayLocal } from '../util/time';
 import type { RangeParams } from './scoring';
 
 export interface OverviewQuery extends RangeParams {
@@ -19,10 +20,10 @@ export interface OverviewQuery extends RangeParams {
   gran?: Granularity;
 }
 
-/** Start date of the bucket containing `date`; weeks start Sunday (Israeli convention). */
+/** Start date of the bucket containing `date`; weeks start on WEEK_START, as in the SQL buckets. */
 function bucketStartOf(date: string, gran: Granularity): string {
   if (gran === 'day') return date;
-  if (gran === 'week') return addDays(date, -new Date(`${date}T00:00:00Z`).getUTCDay());
+  if (gran === 'week') return weekStartOf(date, orgWeekStart());
   return `${date.slice(0, 7)}-01`;
 }
 

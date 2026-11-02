@@ -24,6 +24,7 @@ import type {
   OverviewResponse,
   RecommendationsResponse,
   ReliabilityResponse,
+  SettingsResponse,
   SkillCatalogResponse,
   SkillsResponse,
   SyncJobType,
@@ -267,11 +268,11 @@ export const api = {
 
   runSync: (type: SyncJobType) => request<unknown>('/api/sync/run', { method: 'POST', ...json({ type }) }),
 
-  settings: () => request<AppSettings>('/api/settings'),
+  settings: () => request<SettingsResponse>('/api/settings'),
 
   /** adminPassword is only needed when switching the AI coach back ON. */
   saveSettings: (s: AppSettings, adminPassword?: string) =>
-    request<AppSettings>('/api/settings', {
+    request<SettingsResponse>('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...(adminPassword ? { 'x-admin-password': adminPassword } : {}) },
       body: JSON.stringify(s),

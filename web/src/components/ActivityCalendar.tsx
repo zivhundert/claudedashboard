@@ -4,7 +4,7 @@ import { EChart, type EChartsOption } from '@/components/EChart';
 import type { ChartRef } from '@/components/TrendChart';
 import { useChartTheme, asTipArray } from '@/lib/chartTheme';
 import { fmtCost, fmtNumber, fmtSigned } from '@/lib/format';
-import { nowLocal } from '@/lib/time';
+import { displayWeekStart, nowLocal } from '@/lib/time';
 
 export type CalendarMetric = 'sessions' | 'netLines' | 'cost';
 
@@ -78,7 +78,8 @@ export function ActivityCalendar({
         cellSize: ['auto', 13],
         itemStyle: { color: t.isDark ? '#151a24' : '#f8fafc', borderColor: t.card, borderWidth: 2 },
         splitLine: { lineStyle: { color: t.border, width: 1 } },
-        dayLabel: { color: t.muted, fontSize: 9, firstDay: 0, nameMap: ['S', 'M', 'T', 'W', 'T', 'F', 'S'] },
+        // nameMap is always Sunday-first; firstDay (WEEK_START) only rotates it
+        dayLabel: { color: t.muted, fontSize: 9, firstDay: displayWeekStart(), nameMap: ['S', 'M', 'T', 'W', 'T', 'F', 'S'] },
         monthLabel: { color: t.muted, fontSize: 10 },
         yearLabel: { show: false },
       },

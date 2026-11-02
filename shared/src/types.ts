@@ -5,6 +5,7 @@
  */
 
 import { DEFAULT_SCORE_TARGETS, type ScoreTargets } from './scoring/targets.js';
+import type { WeekStart } from './time/workweek.js';
 
 export type ActorType = 'user' | 'api_key';
 export type Granularity = 'day' | 'week' | 'month';
@@ -177,7 +178,7 @@ export interface BadgeStatus {
 }
 
 export interface StreakInfo {
-  /** consecutive active workdays (Sun–Thu; Fri/Sat never break), trailing 90d */
+  /** consecutive active days on the person's own work week (days they never work don't break it), trailing 90d */
   current: number;
   best: number;
 }
@@ -189,7 +190,7 @@ export interface StreakInfo {
 export interface LeaderboardMetrics {
   sessions: number;
   activeDays: number;
-  /** Sun–Thu days in the selected range */
+  /** days of the configured work week (WORKWEEK, default Sun–Thu) in the selected range */
   workdays: number;
   linesAdded: number;
   linesRemoved: number;
@@ -296,7 +297,7 @@ export interface TimeseriesResponse {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/heatmap — raw UTC hours; client converts to Asia/Jerusalem then bins
+// GET /api/heatmap — raw UTC hours; client converts to the org timezone then bins
 // ---------------------------------------------------------------------------
 
 export interface HeatmapHour {
@@ -472,6 +473,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiCoachPriceOutputUsdPerMTok: 25,
   aiCoachPriceCacheReadUsdPerMTok: 0.5,
 };
+
+/**
+ * The org calendar. Env-owned (WORKWEEK, WEEK_START) and never stored — so it
+ * is not part of AppSettings, and neither ensureDefaults nor a settings save
+ * can touch it.
+ */
+export interface CalendarDto {
+  /** working weekdays, sorted, 0=Sunday */
+  workweek: number[];
+  /** first day of a week bucket, 0=Sunday 1=Monday */
+  weekStart: WeekStart;
+}
+
+/** GET/PUT /api/settings: the stored settings plus the env-owned calendar. */
+export interface SettingsResponse extends AppSettings {
+  calendar: CalendarDto;
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/costs — invoice-grade costs from cost_report (org-level; the API

@@ -11,7 +11,7 @@ export interface ScoringInput {
   userId: number;
   sessions: number;
   activeDays: number;
-  /** Sun–Thu days in the range */
+  /** days of the configured work week (WORKWEEK, default Sun–Thu) in the range */
   workdays: number;
   toolAccepted: number;
   toolRejected: number;

@@ -15,6 +15,7 @@ import {
 } from '../src/scoring/scores.js';
 import { computeBadges } from '../src/scoring/badges.js';
 import {
+  DEFAULT_WORKWEEK,
   addDays,
   bestWorkdayStreak,
   expectedWeekdays,
@@ -22,6 +23,7 @@ import {
   utcHourRangeOfLocalDays,
   currentWorkdayStreak,
   isWorkday,
+  parseWorkweek,
   workdaysBetween,
 } from '../src/time/workweek.js';
 
@@ -168,37 +170,37 @@ describe('workweek (Israel, Sun–Thu)', () => {
     });
   });
   it('classifies weekdays: Fri/Sat are weekend', () => {
-    expect(isWorkday('2026-07-05')).toBe(true); // Sunday
-    expect(isWorkday('2026-07-09')).toBe(true); // Thursday
-    expect(isWorkday('2026-07-10')).toBe(false); // Friday
-    expect(isWorkday('2026-07-11')).toBe(false); // Saturday
+    expect(isWorkday('2026-07-05', DEFAULT_WORKWEEK)).toBe(true); // Sunday
+    expect(isWorkday('2026-07-09', DEFAULT_WORKWEEK)).toBe(true); // Thursday
+    expect(isWorkday('2026-07-10', DEFAULT_WORKWEEK)).toBe(false); // Friday
+    expect(isWorkday('2026-07-11', DEFAULT_WORKWEEK)).toBe(false); // Saturday
   });
   it('counts workdays in a range', () => {
     // Sun 2026-07-05 .. Sat 2026-07-11 = Sun,Mon,Tue,Wed,Thu = 5
-    expect(workdaysBetween('2026-07-05', '2026-07-11')).toBe(5);
+    expect(workdaysBetween('2026-07-05', '2026-07-11', DEFAULT_WORKWEEK)).toBe(5);
   });
   it('streak survives the Fri/Sat weekend', () => {
     // active Wed, Thu, then Sun — Fri/Sat skipped
     const active = new Set(['2026-07-08', '2026-07-09', '2026-07-12']);
-    expect(currentWorkdayStreak(active, '2026-07-12')).toBe(3);
+    expect(currentWorkdayStreak(active, '2026-07-12', DEFAULT_WORKWEEK)).toBe(3);
   });
   it('streak breaks on a missed workday', () => {
     // active Wed, Thu, missed Sun, active Mon
     const active = new Set(['2026-07-08', '2026-07-09', '2026-07-13']);
-    expect(currentWorkdayStreak(active, '2026-07-13')).toBe(1);
+    expect(currentWorkdayStreak(active, '2026-07-13', DEFAULT_WORKWEEK)).toBe(1);
   });
   it('grants grace for asOf itself (today not yet active)', () => {
     const active = new Set(['2026-07-07', '2026-07-08']);
-    expect(currentWorkdayStreak(active, '2026-07-09')).toBe(2);
+    expect(currentWorkdayStreak(active, '2026-07-09', DEFAULT_WORKWEEK)).toBe(2);
   });
   it('grace does not bridge an older gap', () => {
     // asOf active, day before missing → streak 1, not resumed further back
     const active = new Set(['2026-07-06', '2026-07-09']);
-    expect(currentWorkdayStreak(active, '2026-07-09')).toBe(1);
+    expect(currentWorkdayStreak(active, '2026-07-09', DEFAULT_WORKWEEK)).toBe(1);
   });
   it('best streak spans weekends too', () => {
     const active = new Set(['2026-07-08', '2026-07-09', '2026-07-12', '2026-07-13']);
-    expect(bestWorkdayStreak(active)).toBe(4);
+    expect(bestWorkdayStreak(active, DEFAULT_WORKWEEK)).toBe(4);
   });
   it('learns each person\'s work week instead of assuming one', () => {
     // Jul 2026: 1st is a Wednesday. A US schedule: every Mon-Fri, never a weekend.
@@ -206,7 +208,7 @@ describe('workweek (Israel, Sun–Thu)', () => {
     for (const d of ['06', '07', '08', '09', '10', '13', '14', '15', '16', '17', '20', '21', '22', '23', '24']) {
       usDates.add(`2026-07-${d}`); // Mon-Fri x3 weeks
     }
-    const us = expectedWeekdays(usDates, '2026-07-06', '2026-07-24');
+    const us = expectedWeekdays(usDates, '2026-07-06', '2026-07-24', DEFAULT_WORKWEEK);
     expect([...us].sort()).toEqual([1, 2, 3, 4, 5]); // Mon-Fri, no Sunday
     // ...so their idle Sunday does not break the streak, which the Sun-Thu
     // assumption did on every single week
@@ -217,7 +219,7 @@ describe('workweek (Israel, Sun–Thu)', () => {
     for (const d of ['05', '06', '07', '08', '09', '12', '13', '14', '15', '16', '19', '20', '21', '22', '23']) {
       ilDates.add(`2026-07-${d}`);
     }
-    const il = expectedWeekdays(ilDates, '2026-07-05', '2026-07-23');
+    const il = expectedWeekdays(ilDates, '2026-07-05', '2026-07-23', DEFAULT_WORKWEEK);
     expect([...il].sort()).toEqual([0, 1, 2, 3, 4]); // Sun-Thu
     expect(currentWorkdayStreak(ilDates, '2026-07-23', il)).toBe(15);
 
@@ -228,8 +230,8 @@ describe('workweek (Israel, Sun–Thu)', () => {
         (d) => `2026-07-${d}`,
       ),
     );
-    expect(expectedWeekdays(sixDay, '2026-07-04', '2026-07-25').has(6)).toBe(true);
-    expect(expectedWeekdays(sixDay, '2026-07-04', '2026-07-25').has(5)).toBe(false); // never a Friday
+    expect(expectedWeekdays(sixDay, '2026-07-04', '2026-07-25', DEFAULT_WORKWEEK).has(6)).toBe(true);
+    expect(expectedWeekdays(sixDay, '2026-07-04', '2026-07-25', DEFAULT_WORKWEEK).has(5)).toBe(false); // never a Friday
   });
 
   it('never bridges more than a week away', () => {
@@ -256,7 +258,7 @@ describe('workweek (Israel, Sun–Thu)', () => {
   });
 
   it('falls back to Sun-Thu only when there is no history', () => {
-    expect([...expectedWeekdays(new Set(), '2026-07-05', '2026-07-11')].sort()).toEqual([0, 1, 2, 3, 4]);
+    expect([...expectedWeekdays(new Set(), '2026-07-05', '2026-07-11', DEFAULT_WORKWEEK)].sort()).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('an active Fri/Sat counts as a streak day', () => {
@@ -264,12 +266,12 @@ describe('workweek (Israel, Sun–Thu)', () => {
     const active = new Set([
       '2026-07-20', '2026-07-21', '2026-07-22', '2026-07-23', '2026-07-24', '2026-07-25',
     ]);
-    expect(currentWorkdayStreak(active, '2026-07-25')).toBe(6);
-    expect(bestWorkdayStreak(active)).toBe(6);
+    expect(currentWorkdayStreak(active, '2026-07-25', DEFAULT_WORKWEEK)).toBe(6);
+    expect(bestWorkdayStreak(active, DEFAULT_WORKWEEK)).toBe(6);
     // ...and an idle Sunday after it still breaks the current run
     active.add('2026-07-27');
-    expect(currentWorkdayStreak(active, '2026-07-27')).toBe(1);
-    expect(bestWorkdayStreak(active)).toBe(6);
+    expect(currentWorkdayStreak(active, '2026-07-27', DEFAULT_WORKWEEK)).toBe(1);
+    expect(bestWorkdayStreak(active, DEFAULT_WORKWEEK)).toBe(6);
   });
 });
 
@@ -286,6 +288,36 @@ describe('baselines (badges only)', () => {
 
 const TARGETS = DEFAULT_SCORE_TARGETS;
 const FULL_COVERAGE = { pullRequests: 1, commits: 1 };
+
+describe('configured work week (WORKWEEK) in Adoption', () => {
+  const SUN_THU = parseWorkweek('sun-thu');
+  const MON_FRI = parseWorkweek('mon-fri');
+  const adoptionUnder = (week: ReadonlySet<number>, from: string, to: string, overrides: Partial<ScoringInput>) =>
+    computeAxes(makeInput({ ...overrides, workdays: workdaysBetween(from, to, week) }), TARGETS, FULL_COVERAGE)
+      .adoption;
+
+  it('a Mon–Fri week with a missed Friday is no longer "perfect" (Mon 26 – Fri 30 Oct 2026)', () => {
+    // worked Mon–Thu: 32 sessions, 200 tool decisions
+    const worked = { sessions: 32, activeDays: 4, toolAccepted: 160, toolRejected: 40 };
+    expect(workdaysBetween('2026-10-26', '2026-10-30', SUN_THU)).toBe(4);
+    expect(workdaysBetween('2026-10-26', '2026-10-30', MON_FRI)).toBe(5);
+    const sunThu = adoptionUnder(SUN_THU, '2026-10-26', '2026-10-30', worked);
+    const monFri = adoptionUnder(MON_FRI, '2026-10-26', '2026-10-30', worked);
+    expect(sunThu).toBe(100); // Sun–Thu counts 4 workdays, so the missed Friday is invisible
+    expect(monFri).toBeLessThan(sunThu);
+  });
+
+  it('Friday "Today": Sun–Thu sees 0 workdays and zeroes consistency, Mon–Fri does not', () => {
+    // fully active on Friday 30 Oct 2026, every target met
+    const worked = { sessions: 8, activeDays: 1, toolAccepted: 40, toolRejected: 10 };
+    expect(workdaysBetween('2026-10-30', '2026-10-30', SUN_THU)).toBe(0);
+    expect(workdaysBetween('2026-10-30', '2026-10-30', MON_FRI)).toBe(1);
+    const sunThu = adoptionUnder(SUN_THU, '2026-10-30', '2026-10-30', worked);
+    const monFri = adoptionUnder(MON_FRI, '2026-10-30', '2026-10-30', worked);
+    expect(monFri).toBe(100);
+    expect(sunThu).toBeLessThan(monFri); // the whole Mon–Fri team, every Friday
+  });
+});
 
 describe('axis scores and guards', () => {
   const population = [

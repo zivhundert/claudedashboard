@@ -1,5 +1,12 @@
 import { DateTime } from 'luxon';
-import type { Granularity, HeatmapHour } from '@dash/shared';
+import {
+  DEFAULT_WEEK_START,
+  DEFAULT_WORKWEEK,
+  weekStartOf,
+  type Granularity,
+  type HeatmapHour,
+  type WeekStart,
+} from '@dash/shared';
 
 const FALLBACK_ZONE = 'Asia/Jerusalem';
 
@@ -16,6 +23,29 @@ export function setDisplayZone(tz: string | undefined | null): void {
 
 export function displayZone(): string {
   return zone;
+}
+
+/**
+ * The org calendar (WORKWEEK, WEEK_START) — like the zone, reported through
+ * /api/settings and set once on load, with the server's defaults until then.
+ * Read through the getters so a later arrival is picked up.
+ */
+let workweek: ReadonlySet<number> = DEFAULT_WORKWEEK;
+let weekStart: WeekStart = DEFAULT_WEEK_START;
+
+export function setCalendar(days: readonly number[] | undefined | null, start: number | undefined | null): void {
+  if (days && days.length > 0 && days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) {
+    workweek = new Set(days);
+  }
+  if (start === 0 || start === 1) weekStart = start;
+}
+
+export function displayWorkweek(): ReadonlySet<number> {
+  return workweek;
+}
+
+export function displayWeekStart(): WeekStart {
+  return weekStart;
 }
 
 /**
@@ -52,7 +82,7 @@ export interface HeatmapBins {
   peak: { weekday: number; hour: number; value: number } | null;
 }
 
-/** Bin raw UTC hours into a 7×24 Jerusalem-local matrix. */
+/** Bin raw UTC hours into a 7×24 matrix in the display zone, rows by weekday (0=Sun). */
 export function binHeatmap(
   hours: HeatmapHour[],
   value: (h: HeatmapHour) => number = (h) => h.tokens,
@@ -84,20 +114,23 @@ export function binHeatmap(
   return { abs, norm, total, max, peak };
 }
 
-/** Bucket key for a 'YYYY-MM-DD' date under a granularity. Weeks start Sunday. */
+/**
+ * Bucket key for a 'YYYY-MM-DD' date under a granularity. Weeks start on the
+ * server's WEEK_START (`setCalendar`) — the same `weekStartOf` the server's
+ * buckets use, so client-side buckets line up with /api/overview's.
+ */
 export function bucketKey(date: string, gran: Granularity): string {
   if (gran === 'day') return date;
   const dt = DateTime.fromISO(date, { zone: 'utc' });
   if (!dt.isValid) return date;
   if (gran === 'month') return dt.toFormat('yyyy-MM');
-  const dow = dt.weekday % 7; // 0=Sun
-  return dt.minus({ days: dow }).toISODate() ?? date;
+  return weekStartOf(date, weekStart);
 }
 
 /**
  * The calendar window a bucket key covers, clamped to the selected range so the
  * drill-down matches exactly what the bar summed: a day is itself, a week runs
- * Sunday..Saturday, a month 'YYYY-MM' its first..last day.
+ * from its start day (WEEK_START) for 7 days, a month 'YYYY-MM' its first..last day.
  */
 export function bucketRange(bucket: string, gran: Granularity, from: string, to: string): { from: string; to: string } {
   let start = bucket;

@@ -12,7 +12,6 @@ import {
   workdaysBetween,
   utcHourRangeOfLocalDays,
   median,
-  DEFAULT_WORKWEEK,
   TOOL_NAMES,
   type ActorType,
   type Baselines,
@@ -28,7 +27,7 @@ import {
 import type { Repos } from '../repos';
 import { EMPTY_BADGE_STATS } from '../repos/otelRepo';
 import { toUserDto, type UserRow } from '../repos/userRepo';
-import { hourInWindow, localHourOfUtc, orgTimezone } from '../util/time';
+import { hourInWindow, localHourOfUtc, orgTimezone, orgWorkweek } from '../util/time';
 
 export interface RangeParams {
   from: string;
@@ -78,7 +77,10 @@ const emptyPerTool = (): Record<ToolName, { accepted: number; rejected: number }
 
 export function buildLeaderboardData(repos: Repos, range: RangeParams): LeaderboardData {
   const { from, to } = range;
-  const workdays = workdaysBetween(from, to);
+  // the org's configured week: workdays for the targets, and the streak
+  // fallback for anyone with no history yet
+  const workweek = orgWorkweek();
+  const workdays = workdaysBetween(from, to, workweek);
 
   const userRows = repos.users.listAll();
   const usersById = new Map<number, UserRow>();
@@ -186,7 +188,7 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
     const daily = dailyByUser.get(userId);
     const userActiveDates = activeDatesByUser.get(userId) ?? new Set<string>();
     // each person's own work week, over the same trailing window as the streak
-    const userExpected = expectedWeekdays(userActiveDates, streakFrom, to);
+    const userExpected = expectedWeekdays(userActiveDates, streakFrom, to, workweek);
     expectedByUserId.set(userId, userExpected);
     const models = modelsByUser.get(userId) ?? [];
     const activity = activityByUser.get(userId);
@@ -261,7 +263,7 @@ export function buildLeaderboardData(repos: Repos, range: RangeParams): Leaderbo
       daily: dailyByUser.get(userId),
       models: modelsByUser.get(userId) ?? [],
       activeDates: activeDatesByUser.get(userId) ?? new Set(),
-      expected: expectedByUserId.get(userId) ?? DEFAULT_WORKWEEK,
+      expected: expectedByUserId.get(userId) ?? workweek,
       sessionsByDay: sessionsByUserDay.get(userId) ?? new Map(),
       lastActiveDate: lastActiveByUserId.get(userId) ?? null,
       to,
@@ -433,7 +435,7 @@ export function entryForUser(data: LeaderboardData, userId: number): Leaderboard
   // with no usage inside [from, to] must still get their trailing data —
   // matching the semantics used for every in-range user.
   const activeDates = data.activeDatesByUserId.get(userId) ?? new Set<string>();
-  const expected = expectedWeekdays(activeDates, addDays(data.range.to, -89), data.range.to);
+  const expected = expectedWeekdays(activeDates, addDays(data.range.to, -89), data.range.to, orgWorkweek());
   const sessionsByDay = data.sessionsByDayByUserId.get(userId) ?? new Map<string, number>();
 
   const zeroInput: ScoringInput = {
