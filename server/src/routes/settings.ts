@@ -1,4 +1,4 @@
-import { resolveTargets, type AppSettings } from '@dash/shared';
+import { resolveTargets, type AppSettings, type SettingsResponse } from '@dash/shared';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AppContext } from '../context';
@@ -9,8 +9,8 @@ const targetNum = z.number().positive().finite();
 const shareNum = z.number().positive().max(1).finite();
 const hourNum = z.number().int().min(0).max(23);
 
-// displayTimezone, workweek and weekStart are deliberately absent: they come
-// from ORG_TIMEZONE / WORKWEEK / WEEK_START, and an editable copy that nothing
+// displayTimezone and the calendar are deliberately absent: they come from
+// ORG_TIMEZONE / WORKWEEK / WEEK_START, and an editable copy that nothing
 // honoured is worse than no field at all.
 const settingsPatchSchema = z.object({
   linesPerMinute: z.number().positive().optional(),
@@ -57,21 +57,20 @@ const settingsPatchSchema = z.object({
 });
 
 export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): void {
-  /** The stored settings, with the zone and calendar overridden by ORG_TIMEZONE, WORKWEEK and WEEK_START. */
+  /** The stored settings with the zone overridden by ORG_TIMEZONE, plus the env-owned calendar. */
   // scoreTargets is resolved on the way out too: rows persisted by an older
   // build predate whole target groups, and a shallow settings merge would hand
   // the client a half-populated object.
-  const merged = (stored: AppSettings): AppSettings => ({
+  const merged = (stored: AppSettings): SettingsResponse => ({
     ...stored,
     displayTimezone: ctx.env.orgTimezone,
-    workweek: ctx.env.workweek,
-    weekStart: ctx.env.weekStart,
     scoreTargets: resolveTargets(stored.scoreTargets),
+    calendar: { workweek: ctx.env.workweek, weekStart: ctx.env.weekStart },
   });
 
-  app.get('/api/settings', async (): Promise<AppSettings> => merged(ctx.repos.settings.getMerged()));
+  app.get('/api/settings', async (): Promise<SettingsResponse> => merged(ctx.repos.settings.getMerged()));
 
-  app.put('/api/settings', async (req, reply): Promise<AppSettings | FastifyReply> => {
+  app.put('/api/settings', async (req, reply): Promise<SettingsResponse | FastifyReply> => {
     const patch = parseBody(settingsPatchSchema, req.body);
     // Anyone may switch the coach OFF (it spends money); switching it back ON
     // is the privileged direction and needs the admin password.

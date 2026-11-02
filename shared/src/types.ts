@@ -439,12 +439,6 @@ export interface SyncLogsResponse {
 
 export interface AppSettings {
   displayTimezone: string; // default 'Asia/Jerusalem'
-  // workweek + weekStart: like displayTimezone, set by env (WORKWEEK, WEEK_START)
-  // and read-only — the server overrides any stored value on the way out
-  /** working weekdays, sorted, 0=Sunday; default [0,1,2,3,4] (Sun–Thu) */
-  workweek: number[];
-  /** first day of a week bucket, 0=Sunday 1=Monday; default 0 */
-  weekStart: WeekStart;
   /** business-value defaults (client may override locally) */
   linesPerMinute: number; // default 2
   hourlyRateUsd: number; // default 60
@@ -468,8 +462,6 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   displayTimezone: 'Asia/Jerusalem',
-  workweek: [0, 1, 2, 3, 4],
-  weekStart: 0,
   linesPerMinute: 2,
   hourlyRateUsd: 60,
   seatCostUsdMonthly: 60,
@@ -481,6 +473,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiCoachPriceOutputUsdPerMTok: 25,
   aiCoachPriceCacheReadUsdPerMTok: 0.5,
 };
+
+/**
+ * The org calendar. Env-owned (WORKWEEK, WEEK_START) and never stored — so it
+ * is not part of AppSettings, and neither ensureDefaults nor a settings save
+ * can touch it.
+ */
+export interface CalendarDto {
+  /** working weekdays, sorted, 0=Sunday */
+  workweek: number[];
+  /** first day of a week bucket, 0=Sunday 1=Monday */
+  weekStart: WeekStart;
+}
+
+/** GET/PUT /api/settings: the stored settings plus the env-owned calendar. */
+export interface SettingsResponse extends AppSettings {
+  calendar: CalendarDto;
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/costs — invoice-grade costs from cost_report (org-level; the API

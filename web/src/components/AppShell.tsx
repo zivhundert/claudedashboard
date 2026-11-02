@@ -135,7 +135,7 @@ export function AppShell() {
   const zone = displayZone();
   // same for the org calendar (WORKWEEK, WEEK_START): week buckets, heatmap
   // row order and the calendar's first day all read it
-  setCalendar(settings?.workweek, settings?.weekStart);
+  setCalendar(settings?.calendar.workweek, settings?.calendar.weekStart);
   const calendarKey = `${[...displayWorkweek()].join(',')}/${displayWeekStart()}`;
 
   useEffect(() => {
