@@ -34,6 +34,8 @@ import { SyncPill } from '@/components/SyncPill';
 import { PersonaSwitcher } from '@/components/PersonaSwitcher';
 import { ReleaseNotesDialog } from '@/components/ReleaseNotesDialog';
 import { EntityDetailDrawer } from '@/components/EntityDetailDrawer';
+import { ErrorCard } from '@/components/ErrorCard';
+import { Skeleton } from '@/components/Skeleton';
 import { Toaster } from '@/components/Toaster';
 import { Tip } from '@/components/ui';
 import { displayWeekStart, displayWorkweek, displayZone, setCalendar, setDisplayZone } from '@/lib/time';
@@ -130,13 +132,21 @@ export function AppShell() {
   // comparison in the UI has to agree with it. Set DURING render, not in an
   // effect: the zone is a module global, so an effect would leave the first
   // render (and anything it memoized) on the fallback zone.
-  const settings = useSettings().data;
+  const settingsQ = useSettings();
+  const settings = settingsQ.data;
   setDisplayZone(settings?.displayTimezone);
   const zone = displayZone();
   // same for the org calendar (WORKWEEK, WEEK_START): week buckets, heatmap
   // row order and the calendar's first day all read it
   setCalendar(settings?.calendar.workweek, settings?.calendar.weekStart);
   const calendarKey = `${[...displayWorkweek()].join(',')}/${displayWeekStart()}`;
+  // Until settings arrive, those module globals hold the fallbacks (Jerusalem,
+  // Sunday weeks), so pages and the entity drawer wait for them rather than
+  // render once with the wrong calendar; a failed load shows a retry instead
+  // of silently keeping the fallback. Both are keyed on zone + calendar, so a
+  // change after a refetch re-derives every memo under them.
+  const calendarReady = settings !== undefined;
+  const viewKey = `${zone}|${calendarKey}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -278,18 +288,21 @@ export function AppShell() {
           </Tip>
         </header>
 
-        {/* keyed on the zone and calendar so the subtree re-derives when they
-            arrive — memos that don't depend on them would otherwise keep the
-            fallback's dates and weeks */}
         <main className="mx-auto w-full max-w-screen-2xl flex-1 p-4">
-          <Outlet key={`${zone}|${calendarKey}`} />
+          {calendarReady ? (
+            <Outlet key={viewKey} />
+          ) : settingsQ.error ? (
+            <ErrorCard error={settingsQ.error} onRetry={() => void settingsQ.refetch()} />
+          ) : (
+            <Skeleton className="h-96" />
+          )}
         </main>
       </div>
 
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <GuideDrawer open={guideOpen} onOpenChange={setGuideOpen} />
       <ReleaseNotesDialog open={notesOpen} onOpenChange={setNotesOpen} currentVersion={version} />
-      <EntityDetailDrawer />
+      {calendarReady && <EntityDetailDrawer key={viewKey} />}
       <Toaster />
     </div>
   );

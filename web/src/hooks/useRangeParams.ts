@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DateTime } from 'luxon';
 import type { Granularity } from '@dash/shared';
-import { nowLocal } from '@/lib/time';
+import { displayZone, nowLocal } from '@/lib/time';
 
 export type RangePreset = 'today' | '7d' | '30d' | '90d' | 'qtd' | 'custom';
 
@@ -101,9 +101,13 @@ export function useRangeParams(): RangeParams {
     [compareRaw],
   );
 
+  // "today" is read in the display zone, which arrives with /api/settings after
+  // the first render (the header's RangePicker renders before it) — so the zone
+  // is a dependency, or the range stays on the fallback zone's dates.
+  const zone = displayZone();
   const { from, to } = useMemo(
     () => presetRange(preset, searchParams.get('from'), searchParams.get('to')),
-    [preset, searchParams],
+    [preset, searchParams, zone],
   );
 
   const update = useCallback(
