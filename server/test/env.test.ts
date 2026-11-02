@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ZodError } from 'zod';
-import { loadEnv } from '../src/env';
+import { loadCalendarEnv, loadEnv } from '../src/env';
 
 const KEYS = ['DEMO_MODE', 'DATA_SOURCE', 'WORKWEEK', 'WEEK_START', 'ORG_TIMEZONE', 'SYNC_TZ'];
 let saved: Record<string, string | undefined> = {};
@@ -75,6 +75,29 @@ describe('WORKWEEK / WEEK_START', () => {
 
   it('reject an unknown week start', () => {
     expect(bootError({ WEEK_START: 'wed' })).toEqual(['WEEK_START: unknown week start "wed" — use sun or mon']);
+  });
+});
+
+describe('loadCalendarEnv (the seeder\'s entry point)', () => {
+  it('resolves exactly what loadEnv does', () => {
+    for (const vars of [{}, { WORKWEEK: '', WEEK_START: '' }, { WORKWEEK: 'fri, mon,wed', WEEK_START: 'mon' }]) {
+      Object.assign(process.env, vars);
+      const env = loadEnv();
+      expect(loadCalendarEnv()).toEqual({ workweek: env.workweek, weekStart: env.weekStart });
+    }
+  });
+
+  it('fails the same way, naming the variable', () => {
+    process.env['WORKWEEK'] = 'mon-fry';
+    const err = (() => {
+      try {
+        loadCalendarEnv();
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(err).toBeInstanceOf(ZodError);
+    expect((err as ZodError).issues.map((i) => i.path.join('.'))).toEqual(['WORKWEEK']);
   });
 });
 

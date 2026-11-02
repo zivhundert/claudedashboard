@@ -5,6 +5,7 @@ import {
   DEFAULT_ORG_TIMEZONE,
   parseWeekStart,
   parseWorkweek,
+  type CalendarDto,
   type DataSourceDto,
   type PrivacyMode,
   type WeekStart,
@@ -89,6 +90,38 @@ const parsedBy =
     }
   };
 
+/**
+ * The org calendar's env vars, on their own so the seeder parses them exactly
+ * like the server — same defaults, same errors (see loadCalendarEnv).
+ */
+const calendarShape = {
+  /**
+   * The org's working weekdays: what scoring targets count as workdays, and the
+   * streak fallback for someone with no history yet. Two presets, sun-thu
+   * (default) and mon-fri; any other week is a comma list of days
+   * (mon,tue,wed,thu,fri, or numbers 0–6, 0=Sunday, e.g. 1,2,3,4,5).
+   */
+  WORKWEEK: z.preprocess(emptyToUndef, z.string().default('sun-thu').transform(parsedBy(parseWorkweek))),
+  /** First day of a week bucket: sun (default) or mon. */
+  WEEK_START: z.preprocess(emptyToUndef, z.string().default('sun').transform(parsedBy(parseWeekStart))),
+};
+
+const calendarSchema = z.object(calendarShape);
+
+const toCalendar = (p: z.infer<typeof calendarSchema>): CalendarDto => ({
+  workweek: [...p.WORKWEEK].sort((a, b) => a - b),
+  weekStart: p.WEEK_START,
+});
+
+/**
+ * WORKWEEK / WEEK_START from process.env, resolved the same way loadEnv does;
+ * for callers that need only the calendar (the seeder). Throws a ZodError
+ * naming the variable on a bad value.
+ */
+export function loadCalendarEnv(): CalendarDto {
+  return toCalendar(calendarSchema.parse(process.env));
+}
+
 const schema = z.object({
   ADMIN_API_KEY: z.preprocess(emptyToUndef, z.string().optional()),
   ENTERPRISE_ANALYTICS_KEY: z.preprocess(emptyToUndef, z.string().optional()),
@@ -124,15 +157,7 @@ const schema = z.object({
   OTEL_MAX_BODY_MB: z.preprocess(emptyToUndef, z.coerce.number().int().min(1).max(512).default(8)),
   /** IANA zone the daily tables are keyed by, and the org work-week's zone. */
   ORG_TIMEZONE: z.preprocess(emptyToUndef, z.string().default(DEFAULT_ORG_TIMEZONE)),
-  /**
-   * The org's working weekdays: what scoring targets count as workdays, and the
-   * streak fallback for someone with no history yet. Two presets, sun-thu
-   * (default) and mon-fri; any other week is a comma list of days
-   * (mon,tue,wed,thu,fri, or numbers 0–6, 0=Sunday, e.g. 1,2,3,4,5).
-   */
-  WORKWEEK: z.preprocess(emptyToUndef, z.string().default('sun-thu').transform(parsedBy(parseWorkweek))),
-  /** First day of a week bucket: sun (default) or mon. */
-  WEEK_START: z.preprocess(emptyToUndef, z.string().default('sun').transform(parsedBy(parseWeekStart))),
+  ...calendarShape,
   /** Explicit data-source override; keys are still validated per source. */
   DATA_SOURCE: z.preprocess(emptyToUndef, z.enum(['demo', 'telemetry', 'console', 'enterprise']).optional()),
   /** How much detail the OTel receiver keeps (see otel/privacy.ts). */
@@ -329,8 +354,7 @@ export function loadEnv(): Env {
     // OTEL_PORT equal to PORT is the single-listener setup spelled out explicitly.
     otelPort: p.OTEL_PORT !== undefined && p.OTEL_PORT !== p.PORT ? p.OTEL_PORT : null,
     orgTimezone: p.ORG_TIMEZONE,
-    workweek: [...p.WORKWEEK].sort((a, b) => a - b),
-    weekStart: p.WEEK_START,
+    ...toCalendar(p),
     ai: resolveAi(p),
     adminPassword: p.ADMIN_PASSWORD ?? null,
   };

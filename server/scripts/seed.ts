@@ -8,10 +8,10 @@
  * departed user, API-key actors, hourly heatmap data and score snapshots
  * (yesterday + 8 days ago) so celebrate cards and Top Movers have material.
  */
-import { addDays, isWorkday, parseWeekStart, parseWorkweek } from '@dash/shared';
+import { addDays, isWorkday } from '@dash/shared';
 import { openDb } from '../src/db/connection';
 import { migrate } from '../src/db/migrate';
-import { loadDotEnv, resolveFromRepoRoot } from '../src/env';
+import { loadCalendarEnv, loadDotEnv, resolveFromRepoRoot } from '../src/env';
 import { createRepos } from '../src/repos';
 import { buildLeaderboardData } from '../src/services/scoring';
 import { SNAPSHOT_RANGE_KEY } from '../src/sync/snapshot';
@@ -212,16 +212,10 @@ function main(): void {
   // WORKWEEK leaves out (default Sun–Thu → Fri/Sat), and the score snapshots
   // below count workdays the same way. Parsed before the db is touched, so a
   // bad value fails without wiping anything.
-  // empty = default, and a bad value names its variable — both as on the server
-  const fromEnv = <T>(name: string, fallback: string, parse: (v: string) => T): T => {
-    try {
-      return parse(process.env[name]?.trim() || fallback);
-    } catch (err) {
-      throw new Error(`${name}: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-  const workweek = fromEnv('WORKWEEK', 'sun-thu', parseWorkweek);
-  configureCalendar({ workweek: [...workweek], weekStart: fromEnv('WEEK_START', 'sun', parseWeekStart) });
+  // env.ts's own parsing: the server's defaults and errors, nothing to drift
+  const calendar = loadCalendarEnv();
+  configureCalendar(calendar);
+  const workweek: ReadonlySet<number> = new Set(calendar.workweek);
   const isWeekend = (date: string): boolean => !isWorkday(date, workweek);
   const db = openDb(dbPath);
   // Safety: a database with real (non-example) people is never a demo db.
